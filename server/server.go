@@ -2,11 +2,15 @@ package main
 
 /*
 	Flags:
-		--test:		Sets the server's listener to listen on localhost
-					instead of the proper network interface IP address.
+		--test:				Sets the server's listener to listen on localhost instead of the proper
+							network interface IP address.
+		--init-db:			Initialize the database by creating the Teams and Agents Sqlite3 tables.
+		--register-targets:	Add targets by their IP address and point value. Targets are defined
+							in the file "targets.txt" in the CSV form "ip,point_value".
 */
 
 import (
+	"bufio"
 	"crypto/tls"
 	"database/sql"
 	"flag"
@@ -17,6 +21,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/google/uuid"
 
 	"github.com/s-christian/pwnts/utils"
 
@@ -24,9 +29,7 @@ import (
 )
 
 const (
-	ERR_GENERIC          int = 20
-	ERR_DATABASE_INVALID int = 21
-	localPort                = "444"
+	localPort string = "444"
 )
 
 var (
@@ -37,23 +40,25 @@ func handleConnection(conn net.Conn) {
 	// At the end, close the connection with error checking using the anonymous function
 	defer func() {
 		if err := conn.Close(); err != nil {
-			utils.Log(utils.Warning, "Failed to close connection")
+			utils.LogError(utils.Warning, err, "Failed to close connection")
 		}
 	}()
 
-	remoteAddress := conn.RemoteAddr().String()
-	logPrefix := "\t\t[" + remoteAddress + "]"
-
+	remoteAddress := strings.Split(conn.RemoteAddr().String(), ":")
+	//remoteIP := remoteAddress[0]
 	var remotePort int
-	fmt.Sscan(strings.Split(remoteAddress, ":")[1], &remotePort)
-	rootAccess := remotePort < 1024 // TODO: I don't think Windows has privileged ports, what to do in this case?
-	if rootAccess {
-		fmt.Println("Double pwnts, yay!")
-	}
+	fmt.Sscan(remoteAddress[1], &remotePort)
+
+	//rootAccess := remotePort < 1024 // TODO: I don't think Windows has privileged ports, what to do in this case?
+	// if rootAccess {
+	// 	fmt.Println("Double pwnts, yay!")
+	// }
+
+	logPrefix := "\t\t[" + conn.RemoteAddr().String() + "]"
 
 	err := conn.SetReadDeadline(time.Now().Add(time.Second * 1))
 	if err != nil {
-		utils.Log(utils.Warning, logPrefix, "Setting read deadline failed, this is weird")
+		utils.LogError(utils.Warning, err, logPrefix, "Setting read deadline failed, this is weird")
 	}
 
 	readBuffer := make([]byte, 1024) // must be initialized for conn.Read, therefore we use make()
@@ -69,8 +74,20 @@ func handleConnection(conn net.Conn) {
 		// Trim remaining empty bytes (bytes with a value of 0) from string,
 		// without affecting readBuffer itself like the above line would do
 		//readString := strings.TrimRight(string(readBuffer), string([]byte{0}))
-		utils.Log(utils.Info, logPrefix, "String received:")
-		utils.Log(utils.List, "\t\t\t\""+string(readBuffer[:numBytes])+"\"")
+
+		// TODO: Decryption of encrypted Agent message. Encryption on either side not yet implemented.
+
+		// The callback format assumes one piece of data, the Agent's UUID,
+		// but allows for future flexibility with space-separated values.
+		dataReceived := strings.Split(string(readBuffer[:numBytes]), " ")
+		agentUUID, err := uuid.Parse(dataReceived[0])
+		if err != nil {
+			utils.Log(utils.Warning, "Data received from non-Agent (not a valid UUID)!")
+			return
+		}
+
+		utils.Log(utils.List, "\t\t\tCallback from agent", agentUUID.String())
+		//utils.Log(utils.List, "\t\t\t\""+string(readBuffer[:numBytes])+"\"")
 	}
 }
 
@@ -116,8 +133,8 @@ func getOutboundIP() net.IP {
 
 	conn, err := net.Dial("udp", garbageIP+":80")
 	if err != nil {
-		utils.Log(utils.Error, "Couldn't obtain outbound IP address [failed at func getOutBoundIP()]")
-		panic(err)
+		utils.LogError(utils.Error, err, "Couldn't obtain outbound IP address")
+		os.Exit(utils.ERR_GENERIC)
 	}
 	defer conn.Close()
 
@@ -125,6 +142,218 @@ func getOutboundIP() net.IP {
 	localIP := conn.LocalAddr().(*net.UDPAddr)
 
 	return localIP.IP
+}
+
+func validateDatabase(db *sql.DB) {
+	utils.Log(utils.Info, "Validating database")
+
+	if err := db.Ping(); err != nil {
+		utils.Log(utils.Error, "Cannot connect to the database. Have you intialized the database with `go run site.go --init-db` yet?")
+		panic(err)
+	}
+
+	// This query is equivalent to `.tables` within the sqlite CLI, according to
+	// [this](https://sqlite.org/cli.html#querying_the_database_schema) documentation.
+	// showTablesStatement, err := db.Prepare(`
+	// 	SELECT name FROM sqlite_master
+	// 		WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%'
+	// 	UNION ALL
+	// 	SELECT name FROM sqlite_temp_master
+	// 		WHERE type IN ('table','view')
+	// 	ORDER BY 1;
+	// `)
+	// tableNames, err := db.Query(`
+	// 	SELECT name FROM sqlite_master
+	// 		WHERE type IN ('table') AND name NOT LIKE 'sqlite_%'
+	// 	ORDER BY 1;
+	// `)
+	tableNames, err := db.Query("SELECT name FROM sqlite_master WHERE type IN ('table') AND name NOT LIKE 'sqlite_%' ORDER BY 1;")
+	if err != nil {
+		utils.Log(utils.Error, "Unable to query for table names")
+		os.Exit(utils.ERR_GENERIC)
+	}
+	defer tableNames.Close()
+
+	// Iterate over returned rows to count and print all table names
+	var tableName string
+	tableCounter := 0
+	utils.Log(utils.Info, "Printing tables:")
+	for tableNames.Next() {
+		err = tableNames.Scan(&tableName)
+		if err != nil {
+			utils.LogError(utils.Error, err, "Could not scan row for table name")
+			os.Exit(utils.ERR_GENERIC)
+		} else if tableName == "" {
+			utils.Log(utils.Error, "Database appears to be empty (no tables!), please run `go run server.go --init-db` first")
+			fmt.Println("Table = '" + tableName + "'")
+			utils.Log(utils.Debug, "Error temporarily ignored for testing purposes")
+			//os.Exit(ERR_DATABASE_INVALID)
+		} else {
+			tableCounter++
+			color.Yellow("\t\t\t\t\t\t" + tableName)
+		}
+	}
+
+	// Ensure we have the correct number of tables
+	numExpectedTables := 4
+	if tableCounter == numExpectedTables {
+		utils.Log(utils.Done, "Database validated")
+	} else {
+		utils.Log(utils.Error, "Database is missing", fmt.Sprint(numExpectedTables-tableCounter), "tables, please run `go run server.go --init-db`")
+		os.Exit(utils.ERR_DATABASE_INVALID)
+	}
+}
+
+func registerTargets(db *sql.DB) {
+	utils.Log(utils.Info, "Registering targets:")
+
+	currentDirectory, _ := os.Getwd()
+	targetsFile, err := os.Open(currentDirectory + "/server/targets.txt")
+	if err != nil {
+		utils.LogError(utils.Error, err, "Cannot open targets file")
+		os.Exit(utils.ERR_GENERIC)
+	}
+	defer targetsFile.Close()
+
+	addTargetSQL := `
+		INSERT INTO TargetsInScope(target_ipv4_address, value)
+		VALUES (?, ?)
+	`
+	addTargetStatement, err := db.Prepare(addTargetSQL)
+	if err != nil {
+		utils.LogError(utils.Error, err, "Could not create statement to add target")
+		os.Exit(utils.ERR_GENERIC)
+	}
+	defer addTargetStatement.Close()
+
+	scanner := bufio.NewScanner(targetsFile)
+	addedCounter, lineCounter := 0, 0
+	for scanner.Scan() {
+		lineCounter++
+		lineCSV := strings.Split(scanner.Text(), ",")
+
+		var targetIP string = lineCSV[0]
+		var targetValue int
+		fmt.Sscan(lineCSV[1], &targetValue)
+
+		_, err := addTargetStatement.Exec(targetIP, targetValue)
+		if err != nil {
+			utils.LogError(utils.Warning, err, "Could not add the following target:", scanner.Text())
+			continue
+		}
+
+		addedCounter++
+		color.Yellow("\t\t\t\t\t\tTarget IP: " + targetIP + ",\tValue: " + fmt.Sprint(targetValue))
+	}
+
+	targetsCount := db.QueryRow("SELECT COUNT(*) FROM TargetsInScope")
+	var numTargets int
+	targetsCount.Scan(&numTargets)
+
+	utils.Log(utils.Done, "Registered", fmt.Sprintf("%d/%d", addedCounter, lineCounter), "targets")
+	utils.Log(utils.Done, "There are now a total of", fmt.Sprint(numTargets), "targets in scope")
+}
+
+// Flag: --init-db
+func initializeDatabase() {
+	utils.Log(utils.Info, "Initializing database")
+	utils.Log(utils.Debug, "If recreating the entire database, please manually remove the database file")
+
+	// Create database file if it doesn't exist
+	if _, err := os.Stat(utils.DatabaseFilepath); os.IsNotExist(err) {
+		dbFile, err := os.Create(utils.DatabaseFilepath)
+		if err != nil {
+			utils.LogError(utils.Error, err, "Could not create database file")
+			os.Exit(utils.ERR_GENERIC)
+		}
+		utils.Log(utils.Done, "Created database file \""+utils.DatabaseFilename+"\"")
+		dbFile.Close()
+	}
+
+	// Open database
+	db, err := sql.Open("sqlite3", utils.DatabaseFilepath)
+	if err != nil {
+		utils.LogError(utils.Error, err, "Could not open sqlite3 database file \""+utils.DatabaseFilename+"\"")
+		os.Exit(utils.ERR_GENERIC)
+	}
+	if db == nil {
+		utils.Log(utils.Error, "db == nil, this should never happen")
+		os.Exit(utils.ERR_DATABASE_INVALID)
+	} else {
+		utils.Log(utils.Info, "Opened database file")
+	}
+	defer db.Close()
+
+	createTablesCommands, err := os.ReadFile(utils.CurrentDirectory + "/server/create_tables.txt")
+	if err != nil {
+		utils.LogError(utils.Error, err, "Could not read \"create_tables.txt\"")
+		os.Exit(utils.ERR_GENERIC)
+	}
+
+	statement, err := db.Prepare(string(createTablesCommands))
+	if err != nil {
+		utils.LogError(utils.Error, err, "Could not create statement for creation of tables")
+		os.Exit(utils.ERR_GENERIC)
+	}
+	defer statement.Close()
+
+	// statement, err := db.Prepare(`
+	// 	CREATE TABLE IF NOT EXISTS "Teams" (
+	// 		"id"	INTEGER NOT NULL UNIQUE,
+	// 		"name"	TEXT NOT NULL UNIQUE,
+	// 		"score"	INTEGER NOT NULL DEFAULT 0,
+	// 		"created_date"	TEXT NOT NULL,
+	// 		PRIMARY KEY("id" AUTOINCREMENT)
+	// 	);
+	// `)
+	// if err != nil {
+	// 	utils.Log(utils.Error, "Could not create statement for table Teams")
+	// 	panic(err)
+	// }
+	// defer statement.Close()
+
+	_, err = statement.Exec()
+	if err != nil {
+		utils.LogError(utils.Error, err, "Could not create tables")
+		os.Exit(utils.ERR_GENERIC)
+	}
+
+	// if err != nil {
+	// 	utils.Log(utils.Error, "Could not create table Teams")
+	// 	panic(err)
+	// }
+
+	// statement, err = db.Prepare(`
+	// 	CREATE TABLE IF NOT EXISTS "Agents" (
+	// 		"uuid"	TEXT NOT NULL UNIQUE,
+	// 		"team_id"	INTEGER NOT NULL,
+	// 		"server_private_key"	TEXT NOT NULL UNIQUE,
+	// 		"agent_public_key"	TEXT NOT NULL UNIQUE,
+	// 		"source_ip"	TEXT NOT NULL,
+	// 		"last_source_port"	INTEGER,
+	// 		"first_checkin"	TEXT,
+	// 		"last_checkin"	TEXT,
+	// 		"total_score"	INTEGER NOT NULL DEFAULT 0,
+	// 		"last_score"	INTEGER,
+	// 		"created_date"	TEXT NOT NULL,
+	// 		"root_date"	TEXT,
+	// 		FOREIGN KEY("team_id") REFERENCES "Teams"("id"),
+	// 		PRIMARY KEY("uuid")
+	// 	);
+	// `)
+	// if err != nil {
+	// 	utils.Log(utils.Error, "Could not create statement for table Agents")
+	// 	panic(err)
+	// }
+	// defer statement.Close()
+
+	// _, err = statement.Exec()
+	// if err != nil {
+	// 	utils.Log(utils.Error, "Could not create table Agents")
+	// 	panic(err)
+	// }
+
+	utils.Log(utils.Done, "Database initialized")
 }
 
 func printBanner() {
@@ -145,9 +374,15 @@ func main() {
 	// Flags, usage visible with `go run server.go --help`.
 	//	 - Actually, I think attempting to use any flag that doesn't exist brings up the usage.
 	// Flags can be used with one or two '-', doesn't matter.
+
+	// Optionally initialize database by creating tables with the "--init-db" flag
+	var argInitDB bool
+	var argRegisterTargets bool
 	var argQuiet bool
 	var argTest bool
 
+	flag.BoolVar(&argInitDB, "init-db", false, "Initialize the database by creating the Teams and Agents Sqlite3 tables")
+	flag.BoolVar(&argRegisterTargets, "register-targets", false, "Add targets by their IP address and point value. Targets are defined in the file \"targets.txt\" in the CSV form \"ip,point_value\".")
 	flag.BoolVar(&argQuiet, "quiet", false, "Don't print the banner")
 	flag.BoolVar(&argTest, "test", false, "Listen on localhost instead of the default interface's IP address")
 	flag.Parse()
@@ -155,64 +390,43 @@ func main() {
 	if !argQuiet {
 		printBanner()
 	}
-	if argTest {
-		localIP = "127.0.0.1"
-	} else {
-		localIP = getOutboundIP().String()
+
+	if argInitDB {
+		initializeDatabase()
+		os.Exit(0)
 	}
 
 	// Open the Sqlite3 database
 	utils.Log(utils.Info, "Opening database file")
 
-	db, err := sql.Open("sqlite3", "./pwnts.db")
+	// Open database
+	db, err := sql.Open("sqlite3", utils.DatabaseFilepath)
 	if err != nil {
-		utils.Log(utils.Error, "Couldn't open sqlite3 database file. Have you initialized the database with `go run site.go --init-db` yet?")
-		panic(err)
+		utils.LogError(utils.Error, err, "Could not open sqlite3 database file \""+utils.DatabaseFilename+"\"")
+		os.Exit(utils.ERR_GENERIC)
 	}
-	if db != nil {
-		utils.Log(utils.Done, "Opened database file")
+	if db == nil {
+		utils.Log(utils.Error, "db == nil, this should never happen")
+		os.Exit(utils.ERR_DATABASE_INVALID)
 	} else {
-		panic(utils.LogMessage(utils.Done, "db == nil, this should never happen"))
+		utils.Log(utils.Info, "Opened database file")
 	}
 	defer db.Close()
 
-	// Test the database connection
-	utils.Log(utils.Info, "Validating database")
+	// Validate the database connection and structure
+	validateDatabase(db)
 
-	if err = db.Ping(); err != nil {
-		utils.Log(utils.Error, "Cannot connect to the database. Have you intialized the database with `go run site.go --init-db` yet?")
-		panic(err)
+	// Optionally register targets from the file "server/targets.txt"
+	// Flag: --register-targets
+	if argRegisterTargets {
+		registerTargets(db)
+		os.Exit(0)
 	}
 
-	// This query is equivalent to `.tables` within the sqlite CLI, according to
-	// [this](https://sqlite.org/cli.html#querying_the_database_schema) documentation.
-	showTablesStatement, err := db.Prepare(`
-		SELECT name FROM sqlite_master
-			WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%'
-		UNION ALL
-		SELECT name FROM sqlite_temp_master
-			WHERE type IN ('table','view')
-		ORDER BY 1
-	`)
-	if err != nil {
-		utils.Log(utils.Error, "Unable to construct statement for table names")
-		os.Exit(ERR_GENERIC)
-	}
-
-	showTablesQuery, err := showTablesStatement.Query()
-	if err != nil {
-		utils.Log(utils.Error, "Unable to query for table names")
-		os.Exit(ERR_GENERIC)
-	}
-
-	var table string
-	showTablesQuery.Scan(&table)
-	if table == "" {
-		utils.Log(utils.Error, "Database appears to be empty (no tables!), please run `go run site.go --init-db` first")
-		utils.Log(utils.Debug, "Error temporarily ignored for testing purposes")
-		//os.Exit(ERR_DATABASE_INVALID)
+	if argTest {
+		localIP = "127.0.0.1"
 	} else {
-		utils.Log(utils.Done, "Database validated")
+		localIP = getOutboundIP().String()
 	}
 
 	// Set up TLS (encrypted) listener to listen for agent callbacks

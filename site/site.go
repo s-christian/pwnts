@@ -1,41 +1,8 @@
 package main
 
-/*
-	Flags:
-		--init-db:	Initialize the database by creating the Teams and Agents Sqlite3 tables.
-*/
-
-/*
-CREATE TABLE IF NOT EXISTS "Teams" (
-	"id"	INTEGER NOT NULL UNIQUE,
-	"name"	TEXT NOT NULL UNIQUE,
-	"score"	INTEGER NOT NULL DEFAULT 0,
-	"created_date"	TEXT NOT NULL,
-	PRIMARY KEY("id" AUTOINCREMENT)
-);
-
-CREATE TABLE IF NOT EXISTS "Agents" (
-	"uuid"	TEXT NOT NULL UNIQUE,
-	"team_id"	INTEGER NOT NULL,
-	"server_private_key"	TEXT NOT NULL UNIQUE,
-	"agent_public_key"	TEXT NOT NULL UNIQUE,
-	"source_ip"	TEXT NOT NULL,
-	"last_source_port"	INTEGER,
-	"first_checkin"	TEXT,
-	"last_checkin"	TEXT,
-	"total_score"	INTEGER NOT NULL DEFAULT 0,
-	"last_score"	INTEGER,
-	"created_date"	TEXT NOT NULL,
-	"root_date"	TEXT,
-	FOREIGN KEY("team_id") REFERENCES "Teams"("id"),
-	PRIMARY KEY("uuid")
-);
-*/
-
 import (
 	"crypto/tls"
 	"database/sql"
-	"flag"
 	"fmt"
 	"os"
 
@@ -53,83 +20,22 @@ func createCert() {
 	fmt.Println(config)
 }
 
-func initializeDatabase(db *sql.DB) {
-	statement, err := db.Prepare(`
-		CREATE TABLE IF NOT EXISTS "Teams" (
-			"id"	INTEGER NOT NULL UNIQUE,
-			"name"	TEXT NOT NULL UNIQUE,
-			"score"	INTEGER NOT NULL DEFAULT 0,
-			"created_date"	TEXT NOT NULL,
-			PRIMARY KEY("id" AUTOINCREMENT)
-		);
-	`)
-	if err != nil {
-		utils.Log(utils.Error, "Could not create statement for table Teams")
-		panic(err)
-	}
-	defer statement.Close()
-
-	_, err = statement.Exec()
-	if err != nil {
-		utils.Log(utils.Error, "Could not create table Teams")
-		panic(err)
-	}
-
-	statement, err = db.Prepare(`
-		CREATE TABLE IF NOT EXISTS "Agents" (
-			"uuid"	TEXT NOT NULL UNIQUE,
-			"team_id"	INTEGER NOT NULL,
-			"server_private_key"	TEXT NOT NULL UNIQUE,
-			"agent_public_key"	TEXT NOT NULL UNIQUE,
-			"source_ip"	TEXT NOT NULL,
-			"last_source_port"	INTEGER,
-			"first_checkin"	TEXT,
-			"last_checkin"	TEXT,
-			"total_score"	INTEGER NOT NULL DEFAULT 0,
-			"last_score"	INTEGER,
-			"created_date"	TEXT NOT NULL,
-			"root_date"	TEXT,
-			FOREIGN KEY("team_id") REFERENCES "Teams"("id"),
-			PRIMARY KEY("uuid")
-		);
-	`)
-	if err != nil {
-		utils.Log(utils.Error, "Could not create statement for table Agents")
-		panic(err)
-	}
-	defer statement.Close()
-
-	_, err = statement.Exec()
-	if err != nil {
-		utils.Log(utils.Error, "Could not create table Agents")
-		panic(err)
-	}
-}
-
 func main() {
 	// Open database
-	db, err := sql.Open("sqlite3", "./pwnts.db")
+	db, err := sql.Open("sqlite3", utils.DatabaseFilepath)
 	if err != nil {
-		utils.Log(utils.Error, "Couldn't open sqlite3 database file")
-		panic(err)
+		utils.LogError(utils.Error, err, "Could not open sqlite3 database file \""+utils.DatabaseFilename+"\"")
+		os.Exit(utils.ERR_GENERIC)
 	}
-	if db != nil {
-		utils.Log(utils.Done, "Opened database file")
+	if db == nil {
+		utils.Log(utils.Error, "db == nil, this should never happen")
+		os.Exit(utils.ERR_DATABASE_INVALID)
 	} else {
-		panic(utils.LogMessage(utils.Done, "db == nil, this should never happen"))
+		utils.Log(utils.Info, "Opened database file")
 	}
 	defer db.Close()
 
-	// Optionally initialize database by creating tables with the "--init-db" flag
-	var initDB bool
-	flag.BoolVar(&initDB, "--init-db", false, "Initialize the database by creating the Teams and Agents Sqlite3 tables")
-	flag.Parse()
-
-	if initDB {
-		initializeDatabase(db)
-	}
-
-	cert, err := tls.LoadX509KeyPair("../pwnts.red.pem", "../pwnts_server_key.pem")
+	cert, err := tls.LoadX509KeyPair(utils.CurrentDirectory+"/pwnts.red.pem", utils.CurrentDirectory+"/pwnts_server_key.pem")
 	if err != nil {
 		utils.Log(utils.Error, "Couldn't load X509 keypair")
 		os.Exit(1)

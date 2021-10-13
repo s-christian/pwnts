@@ -1,3 +1,7 @@
+This project is still very much a work in progress and is not intended to be used yet.
+
+---
+
 # Pwnts
 
 A Red Team tool for scoring during a cybersecurity competition.

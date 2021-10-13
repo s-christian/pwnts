@@ -17,6 +17,9 @@ const (
 	List    LOGTYPE = 3
 	Done    LOGTYPE = 4
 	Debug   LOGTYPE = 5
+
+	ERR_GENERIC          int = 20
+	ERR_DATABASE_INVALID int = 21
 )
 
 var mapTypesToColor = map[LOGTYPE]color.Attribute{
