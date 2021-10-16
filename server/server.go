@@ -6,7 +6,7 @@ package main
 							network interface IP address.
 		--init-db:			Initialize the database by creating the Teams and Agents Sqlite3 tables.
 		--register-targets:	Add targets by their IP address and point value. Targets are defined
-							in the file "targets.txt" in the CSV form "ip,point_value".
+							in the file "targets.txt" in the CSV format "ip,point_value".
 */
 
 import (
@@ -34,6 +34,7 @@ const (
 
 var (
 	localIP string
+	db      *sql.DB
 )
 
 func handleConnection(conn net.Conn) {
@@ -44,10 +45,11 @@ func handleConnection(conn net.Conn) {
 		}
 	}()
 
-	remoteAddress := strings.Split(conn.RemoteAddr().String(), ":")
-	//remoteIP := remoteAddress[0]
+	remoteAddress := conn.RemoteAddr().String()
+	remoteAddressSplit := strings.Split(remoteAddress, ":")
+	remoteIP := remoteAddress[0]
 	var remotePort int
-	fmt.Sscan(remoteAddress[1], &remotePort)
+	fmt.Sscan(remoteAddressSplit[1], &remotePort)
 
 	//rootAccess := remotePort < 1024 // TODO: I don't think Windows has privileged ports, what to do in this case?
 	// if rootAccess {
@@ -79,15 +81,48 @@ func handleConnection(conn net.Conn) {
 
 		// The callback format assumes one piece of data, the Agent's UUID,
 		// but allows for future flexibility with space-separated values.
-		dataReceived := strings.Split(string(readBuffer[:numBytes]), " ")
-		agentUUID, err := uuid.Parse(dataReceived[0])
+		dataReceived := string(readBuffer[:numBytes])
+		dataReceivedSplit := strings.Split(dataReceived, " ")
+
+		agentUUID, err := uuid.Parse(dataReceivedSplit[0])
+
+		// Invalid Agent callback
 		if err != nil {
-			utils.Log(utils.Warning, "Data received from non-Agent (not a valid UUID)!")
+			utils.LogError(utils.Warning, err, "Data received from non-Agent (not a valid UUID)!")
 			return
 		}
 
+		// Valid Agent callback
 		utils.Log(utils.List, "\t\t\tCallback from agent", agentUUID.String())
-		//utils.Log(utils.List, "\t\t\t\""+string(readBuffer[:numBytes])+"\"")
+
+		// Agent is only testing connection, no entry needed
+		if len(dataReceivedSplit) > 1 && dataReceivedSplit[1] == "TEST" {
+			utils.Log(utils.Info, "\t\t\tAgent is testing connection")
+			return
+		}
+
+		// Register Agent checkin
+		utils.Log(utils.Info, "\t\t\tRegistering checkin")
+
+		// Add AgentCheckins entry
+		addCheckinSQL := `
+			INSERT INTO AgentCheckins(agent_uuid, target_ipv4_address, time_unix)
+			VALUES (?, ?, ?)
+		`
+		addCheckinStatement, err := db.Prepare(addCheckinSQL)
+		if err != nil {
+			utils.LogError(utils.Error, err, "Could not create AddCheckin statement")
+			os.Exit(utils.ERR_GENERIC)
+		}
+		defer addCheckinStatement.Close()
+
+		_, err = addCheckinStatement.Exec(agentUUID.String(), remoteIP, time.Now().Unix())
+		if err != nil {
+			utils.LogError(utils.Error, err, "Could not execute AddCheckin statement")
+			return
+		}
+
+		utils.Log(utils.Done, "\t\t\tAgent checkin registered")
 	}
 }
 
@@ -144,8 +179,14 @@ func getOutboundIP() net.IP {
 	return localIP.IP
 }
 
-func validateDatabase(db *sql.DB) {
+func validateDatabase() {
 	utils.Log(utils.Info, "Validating database")
+
+	// sanity check
+	if db == nil {
+		utils.Log(utils.Error, "db is nil for some reason")
+		os.Exit(utils.ERR_DATABASE_INVALID)
+	}
 
 	if err := db.Ping(); err != nil {
 		utils.Log(utils.Error, "Cannot connect to the database. Have you intialized the database with `go run site.go --init-db` yet?")
@@ -167,7 +208,11 @@ func validateDatabase(db *sql.DB) {
 	// 		WHERE type IN ('table') AND name NOT LIKE 'sqlite_%'
 	// 	ORDER BY 1;
 	// `)
-	tableNames, err := db.Query("SELECT name FROM sqlite_master WHERE type IN ('table') AND name NOT LIKE 'sqlite_%' ORDER BY 1;")
+	tableNames, err := db.Query(`
+		SELECT name FROM sqlite_master
+		WHERE type IN ('table') AND name NOT LIKE 'sqlite_%'
+		ORDER BY 1
+	`)
 	if err != nil {
 		utils.Log(utils.Error, "Unable to query for table names")
 		os.Exit(utils.ERR_GENERIC)
@@ -204,7 +249,7 @@ func validateDatabase(db *sql.DB) {
 	}
 }
 
-func registerTargets(db *sql.DB) {
+func registerTargets() {
 	utils.Log(utils.Info, "Registering targets:")
 
 	currentDirectory, _ := os.Getwd()
@@ -221,7 +266,7 @@ func registerTargets(db *sql.DB) {
 	`
 	addTargetStatement, err := db.Prepare(addTargetSQL)
 	if err != nil {
-		utils.LogError(utils.Error, err, "Could not create statement to add target")
+		utils.LogError(utils.Error, err, "Could not create AddTarget statement")
 		os.Exit(utils.ERR_GENERIC)
 	}
 	defer addTargetStatement.Close()
@@ -382,7 +427,7 @@ func main() {
 	var argTest bool
 
 	flag.BoolVar(&argInitDB, "init-db", false, "Initialize the database by creating the Teams and Agents Sqlite3 tables")
-	flag.BoolVar(&argRegisterTargets, "register-targets", false, "Add targets by their IP address and point value. Targets are defined in the file \"targets.txt\" in the CSV form \"ip,point_value\".")
+	flag.BoolVar(&argRegisterTargets, "register-targets", false, "Add targets by their IP address and point value. Targets are defined in the file \"targets.txt\" in the CSV format \"ip,point_value\".")
 	flag.BoolVar(&argQuiet, "quiet", false, "Don't print the banner")
 	flag.BoolVar(&argTest, "test", false, "Listen on localhost instead of the default interface's IP address")
 	flag.Parse()
@@ -400,7 +445,8 @@ func main() {
 	utils.Log(utils.Info, "Opening database file")
 
 	// Open database
-	db, err := sql.Open("sqlite3", utils.DatabaseFilepath)
+	var err error
+	db, err = sql.Open("sqlite3", utils.DatabaseFilepath)
 	if err != nil {
 		utils.LogError(utils.Error, err, "Could not open sqlite3 database file \""+utils.DatabaseFilename+"\"")
 		os.Exit(utils.ERR_GENERIC)
@@ -408,18 +454,19 @@ func main() {
 	if db == nil {
 		utils.Log(utils.Error, "db == nil, this should never happen")
 		os.Exit(utils.ERR_DATABASE_INVALID)
-	} else {
-		utils.Log(utils.Info, "Opened database file")
 	}
+
+	utils.Log(utils.Info, "Opened database file")
+
 	defer db.Close()
 
 	// Validate the database connection and structure
-	validateDatabase(db)
+	validateDatabase()
 
 	// Optionally register targets from the file "server/targets.txt"
 	// Flag: --register-targets
 	if argRegisterTargets {
-		registerTargets(db)
+		registerTargets()
 		os.Exit(0)
 	}
 

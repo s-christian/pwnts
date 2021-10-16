@@ -12,10 +12,8 @@ CREATE TABLE "Agents" (
 	"team_id"	INTEGER NOT NULL,
 	"server_private_key"	TEXT NOT NULL UNIQUE,
 	"agent_public_key"	TEXT NOT NULL UNIQUE,
-	"last_source_port"	INTEGER,
-	"total_score"	INTEGER NOT NULL DEFAULT 0,
-	"created_date"	TEXT NOT NULL,
-	"root_date"	TEXT,
+	"created_date_unix"	INTEGER NOT NULL,
+	"root_date_unix"	INTEGER,
 	FOREIGN KEY("team_id") REFERENCES "Teams"("team_id"),
 	PRIMARY KEY("agent_uuid")
 );
@@ -27,11 +25,12 @@ CREATE TABLE "TargetsInScope" (
 );
 
 CREATE TABLE "Teams" (
-	"team_id"	INTEGER NOT NULL UNIQUE,
+	"team_id"	INTEGER	NOT NULL UNIQUE,
 	"name"	TEXT NOT NULL UNIQUE,
-	"score"	INTEGER NOT NULL DEFAULT 0,
-	"created_date"	TEXT NOT NULL,
+	"password_hash"	TEXT NOT NULL,
+	"created_date_unix"	INTEGER NOT NULL,
 	PRIMARY KEY("team_id" AUTOINCREMENT)
 );
 
+--This table is automatically generated and used by the AUTOINCREMENT functionality.
 CREATE TABLE sqlite_sequence(name,seq);

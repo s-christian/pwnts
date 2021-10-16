@@ -20,6 +20,9 @@ const (
 
 	ERR_GENERIC          int = 20
 	ERR_DATABASE_INVALID int = 21
+	ERR_CONNECTION       int = 22
+	ERR_WRITE            int = 23
+	ERR_BYTES            int = 24
 )
 
 var mapTypesToColor = map[LOGTYPE]color.Attribute{
