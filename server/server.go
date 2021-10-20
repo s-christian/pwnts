@@ -5,16 +5,14 @@ package main
 		--test:				Sets the server's listener to listen on localhost instead of the proper
 							network interface IP address.
 		--init-db:			Initialize the database by creating the Teams and Agents Sqlite3 tables.
-		--register-targets:	Add targets by their IP address and point value. Targets are defined
-							in the file "targets.txt" in the CSV format "ip,point_value".
 */
 
 import (
-	"bufio"
 	"crypto/tls"
 	"database/sql"
 	"flag"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -29,13 +27,33 @@ import (
 )
 
 const (
-	localPort string = "444"
+	localPort string        = "444"
+	minTime   time.Duration = 1 * time.Minute
+	maxTime   time.Duration = 15 * time.Minute
 )
 
 var (
 	localIP string
 	db      *sql.DB
 )
+
+func calculatePoints(timeDifference time.Duration, targetValue int) int {
+	// Only care about minutes, in cases where a callback might be 5 milliseconds off or something negligible we don't care about.
+	// We don't want to round on minimum time, but rounding on maximum time is fine.
+	// 14.50 => 15, 15.49 => 15
+	if timeDifference.Round(time.Minute) > maxTime {
+		return 1 // only 1 point
+	}
+
+	// Exponential decay in point value
+	// 1.2^(-0.9(x-1))
+	// 1 minute = 100 points, 5 minutes = 52 points, 10 minutes = 23 points, 15 minutes = 10 points
+	// Since UNIX time is used, accuracy is down to the second
+	// Score is calculated as minutes between callbacks
+	const baseValue float64 = 1.2
+	const decayValue float64 = -0.9
+	return int(math.Round(float64(targetValue) * math.Pow(baseValue, (decayValue*(float64(timeDifference/time.Minute)-1)))))
+}
 
 func handleConnection(conn net.Conn) {
 	// At the end, close the connection with error checking using the anonymous function
@@ -47,7 +65,7 @@ func handleConnection(conn net.Conn) {
 
 	remoteAddress := conn.RemoteAddr().String()
 	remoteAddressSplit := strings.Split(remoteAddress, ":")
-	remoteIP := remoteAddress[0]
+	remoteIP := remoteAddressSplit[0]
 	var remotePort int
 	fmt.Sscan(remoteAddressSplit[1], &remotePort)
 
@@ -59,14 +77,12 @@ func handleConnection(conn net.Conn) {
 	logPrefix := "\t\t[" + conn.RemoteAddr().String() + "]"
 
 	err := conn.SetReadDeadline(time.Now().Add(time.Second * 1))
-	if err != nil {
-		utils.LogError(utils.Warning, err, logPrefix, "Setting read deadline failed, this is weird")
-	}
+	utils.CheckError(utils.Warning, err, logPrefix, "Setting read deadline failed, this is weird")
 
 	readBuffer := make([]byte, 1024) // must be initialized for conn.Read, therefore we use make()
 	numBytes, err := conn.Read(readBuffer)
 	if err != nil {
-		utils.Log(utils.Warning, logPrefix, "Could not read bytes (took too long?)")
+		utils.LogError(utils.Warning, err, logPrefix, "Could not read bytes (took too long?)")
 	} else if numBytes == 0 {
 		utils.Log(utils.Warning, logPrefix, "No data received")
 	} else {
@@ -79,6 +95,9 @@ func handleConnection(conn net.Conn) {
 
 		// TODO: Decryption of encrypted Agent message. Encryption on either side not yet implemented.
 
+		/*
+			--- Validate Agent callback format ---
+		*/
 		// The callback format assumes one piece of data, the Agent's UUID,
 		// but allows for future flexibility with space-separated values.
 		dataReceived := string(readBuffer[:numBytes])
@@ -87,42 +106,165 @@ func handleConnection(conn net.Conn) {
 		agentUUID, err := uuid.Parse(dataReceivedSplit[0])
 
 		// Invalid Agent callback
-		if err != nil {
-			utils.LogError(utils.Warning, err, "Data received from non-Agent (not a valid UUID)!")
+		if utils.CheckError(utils.Warning, err, "Data received from non-Agent (Not a valid UUID)!") {
 			return
 		}
 
 		// Valid Agent callback
 		utils.Log(utils.List, "\t\t\tCallback from agent", agentUUID.String())
 
-		// Agent is only testing connection, no entry needed
+		// Agent is only testing connection, no additional processing needed
+		// Response looks like "UUID TEST"
 		if len(dataReceivedSplit) > 1 && dataReceivedSplit[1] == "TEST" {
-			utils.Log(utils.Info, "\t\t\tAgent is testing connection")
+			utils.Log(utils.Done, "\t\t\tAgent is testing connection")
 			return
 		}
 
-		// Register Agent checkin
-		utils.Log(utils.Info, "\t\t\tRegistering checkin")
+		/*
+			--- Validate Agent registration ---
+			: Check that Agent is known to us (registered in our db)
+		*/
+		checkAgentRegistrationSQL := `
+			SELECT * FROM Agents
+			WHERE agent_uuid = ?
+		`
+		checkAgentRegistrationStatement, err := db.Prepare(checkAgentRegistrationSQL)
+		if utils.CheckError(utils.Error, err, "Could not create CheckAgentRegistration statement") {
+			return
+		}
 
-		// Add AgentCheckins entry
+		// TODO: change Query() to QueryRow()
+		agentRegistrationRows, err := checkAgentRegistrationStatement.Query(agentUUID.String())
+		if utils.CheckError(utils.Warning, err, "Could not execute CheckAgentRegistration statement") {
+			return
+		}
+
+		knownAgent := agentRegistrationRows.Next()
+
+		// Unknown (non-registered) Agent UUID
+		if !knownAgent {
+			utils.Log(utils.Warning, "\t\t\tAgent", agentUUID.String(), "is unknown!")
+			return
+		}
+
+		// Agent is known, continue
+		// All timestamps are in seconds from the UNIX epoch
+		var dbAgentUUID string
+		var dbAgentTeam int
+		var dbServerPrivateKey string
+		var dbAgentPublicKey string
+		var dbAgentDate int
+		var dbAgentRootDate int
+		agentRegistrationRows.Scan(&dbAgentUUID, &dbAgentTeam, &dbServerPrivateKey, &dbAgentPublicKey, &dbAgentDate, &dbAgentRootDate)
+		utils.Log(utils.Done, "\t\t\tAgent (Team "+fmt.Sprint(dbAgentTeam)+") is known: created", time.Unix(int64(dbAgentDate), 0).String())
+
+		// let go of db lock
+		checkAgentRegistrationStatement.Close()
+		agentRegistrationRows.Close()
+
+		/*
+			--- Check if callback source IP is in scope ---
+		*/
+		checkSourceIPInScopeSQL := `
+			SELECT * FROM TargetsInScope
+			WHERE target_ipv4_address = ?
+		`
+		checkSourceIPInScopeStatement, err := db.Prepare(checkSourceIPInScopeSQL)
+		if utils.CheckError(utils.Error, err, "Could not create CheckSourceIPInScope statement") {
+			return
+		}
+
+		var dbTargetIP string
+		var dbTargetValue int
+		err = checkSourceIPInScopeStatement.QueryRow(remoteIP).Scan(&dbTargetIP, &dbTargetValue)
+		if err == sql.ErrNoRows {
+			utils.Log(utils.Warning, "\t\t\tSource IP '"+remoteIP+"' is not in scope!")
+			return
+		} else if utils.CheckError(utils.Error, err, "Could not execute CheckSourceIPInScope statement") {
+			return
+		}
+
+		utils.Log(utils.Done, "\t\t\tTarget '"+dbTargetIP+"' is in scope and has a value of '"+fmt.Sprint(dbTargetValue)+"'")
+
+		// Let go of db lock
+		checkSourceIPInScopeStatement.Close()
+
+		/*
+			--- Check time difference between last callback ---
+		*/
+		checkCallbackTimeDifferenceSQL := `
+			SELECT time_unix FROM AgentCheckins
+			WHERE agent_uuid = ?
+			ORDER BY time_unix DESC
+			LIMIT 1
+		` // get only the most recent callback
+		checkCallbackTimeDifferenceStatement, err := db.Prepare(checkCallbackTimeDifferenceSQL)
+		if utils.CheckError(utils.Error, err, "Could not create CheckCallbackTimeDifference statement") {
+			return
+		}
+
+		var callbackPoints int
+
+		// UNIX time, uses seconds
+		var dbLastAgentCheckin int64
+		err = checkCallbackTimeDifferenceStatement.QueryRow(agentUUID.String()).Scan(&dbLastAgentCheckin)
+		if err == sql.ErrNoRows { // first callback
+			utils.Log(utils.List, "\t\t\tThis is this Agent's first callback")
+			callbackPoints = 100
+		} else if utils.CheckError(utils.Warning, err, "Could not execute CheckCallbackTimeDifference statement") { // genuine error
+			return
+		} else { // not first callback
+			// convert UNIX seconds to a time.Duration by multiplying by time.Second
+			var checkinTimeDifference time.Duration = time.Duration(time.Now().Unix()-dbLastAgentCheckin) * time.Second
+			utils.Log(utils.List, "\t\t\tLast callback was", checkinTimeDifference.String(), "ago")
+
+			// Agent called back too soon, must be greater than minTime, skip this callback
+			// We don't want any rounding here
+			// If the Agent is looping 1 minute at a time, then theoretically callbacks should never be less than 1 minute (only maybe more)
+			if checkinTimeDifference < minTime {
+				utils.Log(utils.Warning, "\t\t\tAgent called back too soon, ignoring ("+checkinTimeDifference.String()+" < "+minTime.String()+")")
+				return
+			}
+
+			callbackPoints = calculatePoints(checkinTimeDifference, dbTargetValue)
+
+			utils.Log(utils.Done, "\t\t\tTime between callbacks = "+checkinTimeDifference.String()+", worth", fmt.Sprint(callbackPoints), "points")
+		}
+
+		// Let go of db lock
+		checkCallbackTimeDifferenceStatement.Close()
+
+		/*
+			--- Add points for callback ---
+		*/
+
+		// actually we're using the current score in the moment, not a cumulative total,
+		// so no need to do anything here for now.
+		//println("hi")
+
+		/*
+			--- Register Agent checkin ---
+		*/
+		utils.Log(utils.Info, "\t\t\tRegistering new checkin")
+
 		addCheckinSQL := `
 			INSERT INTO AgentCheckins(agent_uuid, target_ipv4_address, time_unix)
 			VALUES (?, ?, ?)
 		`
 		addCheckinStatement, err := db.Prepare(addCheckinSQL)
-		if err != nil {
-			utils.LogError(utils.Error, err, "Could not create AddCheckin statement")
-			os.Exit(utils.ERR_GENERIC)
+		if utils.CheckError(utils.Error, err, "Could not create AddCheckin statement") {
+			return
 		}
-		defer addCheckinStatement.Close()
 
 		_, err = addCheckinStatement.Exec(agentUUID.String(), remoteIP, time.Now().Unix())
-		if err != nil {
-			utils.LogError(utils.Error, err, "Could not execute AddCheckin statement")
+		if utils.CheckError(utils.Error, err, "Could not execute AddCheckin statement") {
 			return
 		}
 
 		utils.Log(utils.Done, "\t\t\tAgent checkin registered")
+
+		// Let go of db lock
+		addCheckinStatement.Close()
 	}
 }
 
@@ -149,7 +291,7 @@ func setupListener(localAddress string) (net.Listener, error) {
 	utils.Log(utils.Info, "Setting up listener on", localAddress)
 
 	cwd, _ := os.Getwd()
-	cert, err := tls.LoadX509KeyPair(cwd+"/pwnts.red.pem", cwd+"/pwnts_server_key.pem")
+	cert, err := tls.LoadX509KeyPair(cwd+"/pwnts_red.pem", cwd+"/pwnts_server_key.pem")
 	if err != nil {
 		utils.LogError(utils.Error, err, "Couldn't load X509 keypair")
 		os.Exit(1)
@@ -247,56 +389,6 @@ func validateDatabase() {
 		utils.Log(utils.Error, "Database is missing", fmt.Sprint(numExpectedTables-tableCounter), "tables, please run `go run server.go --init-db`")
 		os.Exit(utils.ERR_DATABASE_INVALID)
 	}
-}
-
-func registerTargets() {
-	utils.Log(utils.Info, "Registering targets:")
-
-	currentDirectory, _ := os.Getwd()
-	targetsFile, err := os.Open(currentDirectory + "/server/targets.txt")
-	if err != nil {
-		utils.LogError(utils.Error, err, "Cannot open targets file")
-		os.Exit(utils.ERR_GENERIC)
-	}
-	defer targetsFile.Close()
-
-	addTargetSQL := `
-		INSERT INTO TargetsInScope(target_ipv4_address, value)
-		VALUES (?, ?)
-	`
-	addTargetStatement, err := db.Prepare(addTargetSQL)
-	if err != nil {
-		utils.LogError(utils.Error, err, "Could not create AddTarget statement")
-		os.Exit(utils.ERR_GENERIC)
-	}
-	defer addTargetStatement.Close()
-
-	scanner := bufio.NewScanner(targetsFile)
-	addedCounter, lineCounter := 0, 0
-	for scanner.Scan() {
-		lineCounter++
-		lineCSV := strings.Split(scanner.Text(), ",")
-
-		var targetIP string = lineCSV[0]
-		var targetValue int
-		fmt.Sscan(lineCSV[1], &targetValue)
-
-		_, err := addTargetStatement.Exec(targetIP, targetValue)
-		if err != nil {
-			utils.LogError(utils.Warning, err, "Could not add the following target:", scanner.Text())
-			continue
-		}
-
-		addedCounter++
-		color.Yellow("\t\t\t\t\t\tTarget IP: " + targetIP + ",\tValue: " + fmt.Sprint(targetValue))
-	}
-
-	targetsCount := db.QueryRow("SELECT COUNT(*) FROM TargetsInScope")
-	var numTargets int
-	targetsCount.Scan(&numTargets)
-
-	utils.Log(utils.Done, "Registered", fmt.Sprintf("%d/%d", addedCounter, lineCounter), "targets")
-	utils.Log(utils.Done, "There are now a total of", fmt.Sprint(numTargets), "targets in scope")
 }
 
 // Flag: --init-db
@@ -418,16 +510,14 @@ func printBanner() {
 func main() {
 	// Flags, usage visible with `go run server.go --help`.
 	//	 - Actually, I think attempting to use any flag that doesn't exist brings up the usage.
-	// Flags can be used with one or two '-', doesn't matter.
+	// Flags can be used with '--name' or '-name', doesn't matter.
 
 	// Optionally initialize database by creating tables with the "--init-db" flag
 	var argInitDB bool
-	var argRegisterTargets bool
 	var argQuiet bool
 	var argTest bool
 
 	flag.BoolVar(&argInitDB, "init-db", false, "Initialize the database by creating the Teams and Agents Sqlite3 tables")
-	flag.BoolVar(&argRegisterTargets, "register-targets", false, "Add targets by their IP address and point value. Targets are defined in the file \"targets.txt\" in the CSV format \"ip,point_value\".")
 	flag.BoolVar(&argQuiet, "quiet", false, "Don't print the banner")
 	flag.BoolVar(&argTest, "test", false, "Listen on localhost instead of the default interface's IP address")
 	flag.Parse()
@@ -457,18 +547,10 @@ func main() {
 	}
 
 	utils.Log(utils.Info, "Opened database file")
-
 	defer db.Close()
 
 	// Validate the database connection and structure
 	validateDatabase()
-
-	// Optionally register targets from the file "server/targets.txt"
-	// Flag: --register-targets
-	if argRegisterTargets {
-		registerTargets()
-		os.Exit(0)
-	}
 
 	if argTest {
 		localIP = "127.0.0.1"
