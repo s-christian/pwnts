@@ -47,7 +47,7 @@ var (
 	serverPort        int           = 444
 	serverAddress     net.TCPAddr   = net.TCPAddr{IP: net.ParseIP(serverIP), Port: serverPort}
 	tlsConfig         tls.Config    = tls.Config{InsecureSkipVerify: true}
-	waitTimeInMinutes time.Duration = 2 * time.Minute
+	waitTimeInMinutes time.Duration = 1 * time.Minute
 )
 
 func callback() {

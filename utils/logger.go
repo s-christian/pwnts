@@ -19,11 +19,18 @@ const (
 	Done    LOGTYPE = 4
 	Debug   LOGTYPE = 5
 
-	ERR_GENERIC          int = 20
-	ERR_DATABASE_INVALID int = 21
-	ERR_CONNECTION       int = 22
-	ERR_WRITE            int = 23
-	ERR_BYTES            int = 24
+	EXIT_SUCCESS int = 0
+
+	ERR_USAGE     int = 10
+	ERR_INPUT     int = 11
+	ERR_UUID      int = 12
+	ERR_FILE_READ int = 13
+
+	ERR_CONNECTION int = 30
+	ERR_WRITE      int = 31
+	ERR_BYTES      int = 32
+
+	ERR_GENERIC int = 50
 )
 
 var mapTypesToColor = map[LOGTYPE]color.Attribute{
@@ -52,19 +59,19 @@ func Log(logType LOGTYPE, messages ...string) {
 	)
 }
 
+func LogReturn(logType LOGTYPE, messages ...string) string {
+	return fmt.Sprintf("%s (%s)\t%s",
+		mapTypesToPrefix[logType],
+		time.Now().Format(time.RFC3339Nano),
+		color.New(color.Bold, mapTypesToColor[logType]).Sprint(strings.Join(messages, " ")),
+	)
+}
+
 func LogError(logType LOGTYPE, err error, messages ...string) {
 	Log(logType, messages...)
 	fmt.Printf("\t\t\t\t\t\t%s\n",
 		color.New(color.Bold, mapTypesToColor[logType]).Sprint(err.Error()),
 	)
-}
-
-func CheckErrorExit(logType LOGTYPE, err error, errCode int, messages ...string) {
-	if err != nil {
-		LogError(logType, err, messages...)
-		os.Exit(errCode)
-	}
-	// otherwise continue on like normal
 }
 
 func CheckError(logType LOGTYPE, err error, messages ...string) bool {
@@ -75,10 +82,10 @@ func CheckError(logType LOGTYPE, err error, messages ...string) bool {
 	return false
 }
 
-func LogMessage(logType LOGTYPE, messages ...string) string {
-	return fmt.Sprintf("%s (%s)\t%s",
-		mapTypesToPrefix[logType],
-		time.Now().Format(time.RFC3339Nano),
-		color.New(color.Bold, mapTypesToColor[logType]).Sprint(strings.Join(messages, " ")),
-	)
+// Same as CheckError() but exit on error
+func CheckErrorExit(logType LOGTYPE, err error, errCode int, messages ...string) {
+	if CheckError(logType, err, messages...) {
+		os.Exit(errCode)
+	}
+	// otherwise continue
 }

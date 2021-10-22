@@ -4,7 +4,6 @@ package main
 	Flags:
 		--test:				Sets the server's listener to listen on localhost instead of the proper
 							network interface IP address.
-		--init-db:			Initialize the database by creating the Teams and Agents Sqlite3 tables.
 */
 
 import (
@@ -321,178 +320,6 @@ func getOutboundIP() net.IP {
 	return localIP.IP
 }
 
-func validateDatabase() {
-	utils.Log(utils.Info, "Validating database")
-
-	// sanity check
-	if db == nil {
-		utils.Log(utils.Error, "db is nil for some reason")
-		os.Exit(utils.ERR_DATABASE_INVALID)
-	}
-
-	if err := db.Ping(); err != nil {
-		utils.Log(utils.Error, "Cannot connect to the database. Have you intialized the database with `go run site.go --init-db` yet?")
-		panic(err)
-	}
-
-	// This query is equivalent to `.tables` within the sqlite CLI, according to
-	// [this](https://sqlite.org/cli.html#querying_the_database_schema) documentation.
-	// showTablesStatement, err := db.Prepare(`
-	// 	SELECT name FROM sqlite_master
-	// 		WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%'
-	// 	UNION ALL
-	// 	SELECT name FROM sqlite_temp_master
-	// 		WHERE type IN ('table','view')
-	// 	ORDER BY 1;
-	// `)
-	// tableNames, err := db.Query(`
-	// 	SELECT name FROM sqlite_master
-	// 		WHERE type IN ('table') AND name NOT LIKE 'sqlite_%'
-	// 	ORDER BY 1;
-	// `)
-	tableNames, err := db.Query(`
-		SELECT name FROM sqlite_master
-		WHERE type IN ('table') AND name NOT LIKE 'sqlite_%'
-		ORDER BY 1
-	`)
-	if err != nil {
-		utils.Log(utils.Error, "Unable to query for table names")
-		os.Exit(utils.ERR_GENERIC)
-	}
-	defer tableNames.Close()
-
-	// Iterate over returned rows to count and print all table names
-	var tableName string
-	tableCounter := 0
-	utils.Log(utils.Info, "Printing tables:")
-	for tableNames.Next() {
-		err = tableNames.Scan(&tableName)
-		if err != nil {
-			utils.LogError(utils.Error, err, "Could not scan row for table name")
-			os.Exit(utils.ERR_GENERIC)
-		} else if tableName == "" {
-			utils.Log(utils.Error, "Database appears to be empty (no tables!), please run `go run server.go --init-db` first")
-			fmt.Println("Table = '" + tableName + "'")
-			utils.Log(utils.Debug, "Error temporarily ignored for testing purposes")
-			//os.Exit(ERR_DATABASE_INVALID)
-		} else {
-			tableCounter++
-			color.Yellow("\t\t\t\t\t\t" + tableName)
-		}
-	}
-
-	// Ensure we have the correct number of tables
-	numExpectedTables := 4
-	if tableCounter == numExpectedTables {
-		utils.Log(utils.Done, "Database validated")
-	} else {
-		utils.Log(utils.Error, "Database is missing", fmt.Sprint(numExpectedTables-tableCounter), "tables, please run `go run server.go --init-db`")
-		os.Exit(utils.ERR_DATABASE_INVALID)
-	}
-}
-
-// Flag: --init-db
-func initializeDatabase() {
-	utils.Log(utils.Info, "Initializing database")
-	utils.Log(utils.Debug, "If recreating the entire database, please manually remove the database file")
-
-	// Create database file if it doesn't exist
-	if _, err := os.Stat(utils.DatabaseFilepath); os.IsNotExist(err) {
-		dbFile, err := os.Create(utils.DatabaseFilepath)
-		if err != nil {
-			utils.LogError(utils.Error, err, "Could not create database file")
-			os.Exit(utils.ERR_GENERIC)
-		}
-		utils.Log(utils.Done, "Created database file \""+utils.DatabaseFilename+"\"")
-		dbFile.Close()
-	}
-
-	// Open database
-	db, err := sql.Open("sqlite3", utils.DatabaseFilepath)
-	if err != nil {
-		utils.LogError(utils.Error, err, "Could not open sqlite3 database file \""+utils.DatabaseFilename+"\"")
-		os.Exit(utils.ERR_GENERIC)
-	}
-	if db == nil {
-		utils.Log(utils.Error, "db == nil, this should never happen")
-		os.Exit(utils.ERR_DATABASE_INVALID)
-	} else {
-		utils.Log(utils.Info, "Opened database file")
-	}
-	defer db.Close()
-
-	createTablesCommands, err := os.ReadFile(utils.CurrentDirectory + "/server/create_tables.txt")
-	if err != nil {
-		utils.LogError(utils.Error, err, "Could not read \"create_tables.txt\"")
-		os.Exit(utils.ERR_GENERIC)
-	}
-
-	statement, err := db.Prepare(string(createTablesCommands))
-	if err != nil {
-		utils.LogError(utils.Error, err, "Could not create statement for creation of tables")
-		os.Exit(utils.ERR_GENERIC)
-	}
-	defer statement.Close()
-
-	// statement, err := db.Prepare(`
-	// 	CREATE TABLE IF NOT EXISTS "Teams" (
-	// 		"id"	INTEGER NOT NULL UNIQUE,
-	// 		"name"	TEXT NOT NULL UNIQUE,
-	// 		"score"	INTEGER NOT NULL DEFAULT 0,
-	// 		"created_date"	TEXT NOT NULL,
-	// 		PRIMARY KEY("id" AUTOINCREMENT)
-	// 	);
-	// `)
-	// if err != nil {
-	// 	utils.Log(utils.Error, "Could not create statement for table Teams")
-	// 	panic(err)
-	// }
-	// defer statement.Close()
-
-	_, err = statement.Exec()
-	if err != nil {
-		utils.LogError(utils.Error, err, "Could not create tables")
-		os.Exit(utils.ERR_GENERIC)
-	}
-
-	// if err != nil {
-	// 	utils.Log(utils.Error, "Could not create table Teams")
-	// 	panic(err)
-	// }
-
-	// statement, err = db.Prepare(`
-	// 	CREATE TABLE IF NOT EXISTS "Agents" (
-	// 		"uuid"	TEXT NOT NULL UNIQUE,
-	// 		"team_id"	INTEGER NOT NULL,
-	// 		"server_private_key"	TEXT NOT NULL UNIQUE,
-	// 		"agent_public_key"	TEXT NOT NULL UNIQUE,
-	// 		"source_ip"	TEXT NOT NULL,
-	// 		"last_source_port"	INTEGER,
-	// 		"first_checkin"	TEXT,
-	// 		"last_checkin"	TEXT,
-	// 		"total_score"	INTEGER NOT NULL DEFAULT 0,
-	// 		"last_score"	INTEGER,
-	// 		"created_date"	TEXT NOT NULL,
-	// 		"root_date"	TEXT,
-	// 		FOREIGN KEY("team_id") REFERENCES "Teams"("id"),
-	// 		PRIMARY KEY("uuid")
-	// 	);
-	// `)
-	// if err != nil {
-	// 	utils.Log(utils.Error, "Could not create statement for table Agents")
-	// 	panic(err)
-	// }
-	// defer statement.Close()
-
-	// _, err = statement.Exec()
-	// if err != nil {
-	// 	utils.Log(utils.Error, "Could not create table Agents")
-	// 	panic(err)
-	// }
-
-	utils.Log(utils.Done, "Database initialized")
-}
-
 func printBanner() {
 	color.Magenta("=============================================")
 	color.Red(" _______           _       _________ _______ ")
@@ -513,22 +340,15 @@ func main() {
 	// Flags can be used with '--name' or '-name', doesn't matter.
 
 	// Optionally initialize database by creating tables with the "--init-db" flag
-	var argInitDB bool
 	var argQuiet bool
 	var argTest bool
 
-	flag.BoolVar(&argInitDB, "init-db", false, "Initialize the database by creating the Teams and Agents Sqlite3 tables")
 	flag.BoolVar(&argQuiet, "quiet", false, "Don't print the banner")
 	flag.BoolVar(&argTest, "test", false, "Listen on localhost instead of the default interface's IP address")
 	flag.Parse()
 
 	if !argQuiet {
 		printBanner()
-	}
-
-	if argInitDB {
-		initializeDatabase()
-		os.Exit(0)
 	}
 
 	// Open the Sqlite3 database
@@ -550,7 +370,7 @@ func main() {
 	defer db.Close()
 
 	// Validate the database connection and structure
-	validateDatabase()
+	utils.ValidateDatabaseExit(db)
 
 	if argTest {
 		localIP = "127.0.0.1"
