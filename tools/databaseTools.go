@@ -198,7 +198,7 @@ func main() {
 	var argTeamID int
 
 	flag.BoolVar(&argInitDB, "init-db", false, "Initialize the database by creating the Teams and Agents Sqlite3 tables")
-	flag.StringVar(&argRegisterTargetsFromFile, "register-targets", "", "Add targets by their IP address and point value. By default, targets are defined in the file \"/server/targets.txt\" in the CSV format \"ip,point_value\".")
+	flag.StringVar(&argRegisterTargetsFromFile, "register-targets", "", "Add targets by their IP address and point value. Targets are defined in the file \"targets.txt\" in the CSV format \"ip,point_value\".")
 	flag.StringVar(&argRegisterAgentUUID, "register-agent", "", "Register an Agent UUID.")
 	flag.IntVar(&argTeamID, "team-id", -1, "The Team ID the Agent should belong to. (Required if using the `--register-agent` flag)")
 
