@@ -321,16 +321,22 @@ func getOutboundIP() net.IP {
 }
 
 func printBanner() {
-	color.Magenta("=============================================")
-	color.Red(" _______           _       _________ _______ ")
-	color.Red("(  ____ )|\\     /|( (    /|\\__   __/(  ____ \\")
-	color.Red("| (    )|| )   ( ||  \\  ( |   ) (   | (    \\/")
-	color.Red("| (____)|| | _ | ||   \\ | |   | |   | (_____ ")
-	color.Red("|  _____)| |( )| || (\\ \\) |   | |   (_____  )")
-	color.Red("| (      | || || || | \\   |   | |         ) |")
-	color.Red("| )      | () () || )  \\  |   | |   /\\____) |")
-	color.Red("|/       (_______)|/    )_)   )_(   \\_______)")
-	color.Magenta("=============================================")
+	pwntsBannerDivider := "============================================="
+	pwntsBanner :=
+		` _______           _       _________ _______ 
+(  ____ )|\     /|( (    /|\__   __/(  ____ \
+| (    )|| )   ( ||  \  ( |   ) (   | (    \/
+| (____)|| | _ | ||   \ | |   | |   | (_____ 
+|  _____)| |( )| || (\ \) |   | |   (_____  )
+| (      | || || || | \   |   | |         ) |
+| )      | () () || )  \  |   | |   /\____) |
+|/       (_______)|/    )_)   )_(   \_______)
+`
+
+	color.Magenta(pwntsBannerDivider)
+	color.Red(pwntsBanner)
+	color.Magenta(pwntsBannerDivider)
+
 	fmt.Println()
 }
 
@@ -355,19 +361,11 @@ func main() {
 	utils.Log(utils.Info, "Opening database file")
 
 	// Open database
-	var err error
-	db, err = sql.Open("sqlite3", utils.DatabaseFilepath)
-	if err != nil {
-		utils.LogError(utils.Error, err, "Could not open sqlite3 database file \""+utils.DatabaseFilename+"\"")
-		os.Exit(utils.ERR_GENERIC)
-	}
-	if db == nil {
-		utils.Log(utils.Error, "db == nil, this should never happen")
-		os.Exit(utils.ERR_DATABASE_INVALID)
-	}
+	// make sure you don't use `:=` here as it would define its own locally-scoped variable
+	db = utils.GetDatabaseHandle()
 
 	utils.Log(utils.Info, "Opened database file")
-	defer db.Close()
+	defer utils.CloseDatabase(db)
 
 	// Validate the database connection and structure
 	utils.ValidateDatabaseExit(db)

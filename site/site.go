@@ -110,7 +110,7 @@ func main() {
 	} else {
 		utils.Log(utils.Info, "Opened database file")
 	}
-	defer db.Close()
+	defer utils.CloseDatabase(db)
 
 	// cert, err := tls.LoadX509KeyPair(utils.CurrentDirectory+"/pwnts.red.pem", utils.CurrentDirectory+"/pwnts_server_key.pem")
 	// if err != nil {

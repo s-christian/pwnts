@@ -81,8 +81,7 @@ func ValidateDatabase(db *sql.DB) bool {
 
 		if tableName == "" {
 			Log(Error, "Database appears to be empty (no tables!), please run `go run databaseTools.go --init-db` first")
-			color.Red("\t\t\t\t\t\t'" + tableName + "'")
-			//Log(Debug, "Error temporarily ignored for testing purposes")
+			MapTypesToColor[List].Println("\t\t\t\t\t\t'" + tableName + "'")
 			os.Exit(ERR_DATABASE_INVALID)
 		} else {
 			tableCounter++
