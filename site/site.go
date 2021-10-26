@@ -17,7 +17,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/s-christian/pwnts/utils"
@@ -97,20 +96,10 @@ func handleRequests() {
 }
 
 func main() {
-	// we want to validate the db with our checks from server.go before running site.go
-	utils.Log(utils.Warning, "--- If you have not already done so, please run the server before running this ---")
+	//utils.Log(utils.Warning, "--- If you have not already done so, please run the server before running this ---")
 
-	// Open database
-	var err error                                         // must explicitly declare this variable ot be able to use "=" instead of ":=" in the below sql.Open statement.
-	db, err = sql.Open("sqlite3", utils.DatabaseFilepath) // "=" required instead of ":=" as to not declare a local `db` variable
-	utils.CheckErrorExit(utils.Error, err, utils.ERR_GENERIC, "Could not open sqlite database file \""+utils.DatabaseFilename+"\"")
-	if db == nil {
-		utils.Log(utils.Error, "db == nil, this should never happen")
-		os.Exit(utils.ERR_DATABASE_INVALID)
-	} else {
-		utils.Log(utils.Info, "Opened database file")
-	}
-	defer utils.CloseDatabase(db)
+	db := utils.GetDatabaseHandle()
+	defer utils.Close(db)
 
 	// cert, err := tls.LoadX509KeyPair(utils.CurrentDirectory+"/pwnts.red.pem", utils.CurrentDirectory+"/pwnts_server_key.pem")
 	// if err != nil {
@@ -142,6 +131,6 @@ func main() {
 	handleRequests()
 
 	address := "localhost" + listenPort
-	err = http.ListenAndServeTLS(address, certPath, privateKeyPath, nil)
+	err := http.ListenAndServeTLS(address, certPath, privateKeyPath, nil)
 	utils.CheckErrorExit(utils.Error, err, utils.ERR_GENERIC, "Couldn't start HTTP listener at", address)
 }

@@ -3,6 +3,7 @@ package utils
 import (
 	"database/sql"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/fatih/color"
@@ -107,6 +108,10 @@ func ValidateDatabaseExit(db *sql.DB) {
 	}
 }
 
-func CloseDatabase(db *sql.DB) {
-	CheckError(Error, db.Close(), "Failed to close database connection")
+func Close(closable io.Closer) {
+	CheckError(Error, closable.Close(), "Failed to close")
 }
+
+// func CloseDatabase(db *sql.DB) {
+// 	CheckError(Error, db.Close(), "Failed to close database connection")
+// }

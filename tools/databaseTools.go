@@ -34,7 +34,7 @@ func registerAgent(agentUUID string, teamID int) { //, serverPrivateKey string, 
 	db := utils.GetDatabaseHandle()
 	// don't need to ValidateDatabaseExit() here since that's already done for us
 	// in validateTeamID(), always called before this function.
-	defer utils.CloseDatabase(db)
+	defer utils.Close(db)
 
 	addAgentSQL := `
 		INSERT INTO Agents(agent_uuid, team_id, server_private_key, agent_public_key, created_date_unix, root_date_unix)
@@ -44,7 +44,7 @@ func registerAgent(agentUUID string, teamID int) { //, serverPrivateKey string, 
 	if utils.CheckError(utils.Error, err, "\tCould not create AddTarget statement") {
 		return
 	}
-	defer addAgentStatement.Close()
+	defer utils.Close(addAgentStatement)
 
 	// TODO: Randomly generate this crypto keypair
 	serverPrivateKey := "555"
@@ -73,7 +73,7 @@ func validateTeamID(teamID int) {
 
 	db := utils.GetDatabaseHandle()
 	utils.ValidateDatabaseExit(db)
-	defer utils.CloseDatabase(db)
+	defer utils.Close(db)
 
 	validateTeamIDSQL := `
 		SELECT team_id, name, created_date_unix FROM Teams
@@ -104,12 +104,12 @@ func registerTargetsFromFile(filename string) {
 
 	db := utils.GetDatabaseHandle()
 	utils.ValidateDatabaseExit(db)
-	defer utils.CloseDatabase(db)
+	defer utils.Close(db)
 
 	fullFilePath := utils.CurrentDirectory + filename
 	targetsFile, err := os.Open(fullFilePath)
 	utils.CheckErrorExit(utils.Error, err, utils.ERR_GENERIC, "Cannot open file '"+fullFilePath+"'")
-	defer targetsFile.Close()
+	defer utils.Close(targetsFile)
 
 	addTargetSQL := `
 		INSERT INTO TargetsInScope(target_ipv4_address, value)
@@ -117,7 +117,7 @@ func registerTargetsFromFile(filename string) {
 	`
 	addTargetStatement, err := db.Prepare(addTargetSQL)
 	utils.CheckErrorExit(utils.Error, err, utils.ERR_GENERIC, "Could not create AddTarget statement")
-	defer addTargetStatement.Close()
+	defer utils.Close(addTargetStatement)
 
 	scanner := bufio.NewScanner(targetsFile)
 	addedCounter, lineCounter := 0, 0
@@ -170,15 +170,15 @@ func initializeDatabase() {
 		utils.Log(utils.Done, "No need to initialize database")
 		return
 	}
-	defer utils.CloseDatabase(db)
+	defer utils.Close(db)
 
-	const createTablesFile string = "/server/create_tables.txt" // default
+	const createTablesFile string = "/tools/create_tables.txt" // default
 	createTablesCommands, err := os.ReadFile(utils.CurrentDirectory + createTablesFile)
 	utils.CheckErrorExit(utils.Error, err, utils.ERR_FILE_READ, "Could not read file \"create_tables.txt\"")
 
 	statement, err := db.Prepare(string(createTablesCommands))
 	utils.CheckErrorExit(utils.Error, err, utils.ERR_STATEMENT, "Could not create CreateTablesCommands statement")
-	defer statement.Close()
+	defer utils.Close(statement)
 
 	_, err = statement.Exec()
 	if err != nil {

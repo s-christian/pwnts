@@ -209,7 +209,7 @@ func handleConnection(conn net.Conn) {
 		err = checkCallbackTimeDifferenceStatement.QueryRow(agentUUID.String()).Scan(&dbLastAgentCheckin)
 		if err == sql.ErrNoRows { // first callback
 			utils.Log(utils.List, "\t\t\tThis is this Agent's first callback")
-			callbackPoints = 100
+			callbackPoints = 100 // pwn = 100 points at first, no matter what
 		} else if utils.CheckError(utils.Warning, err, "Could not execute CheckCallbackTimeDifference statement") { // genuine error
 			return
 		} else { // not first callback
@@ -301,25 +301,6 @@ func setupListener(localAddress string) (net.Listener, error) {
 	return tls.Listen("tcp", localAddress, &tlsConfig)
 }
 
-// Get preferred outbound IP address of this machine
-func getOutboundIP() net.IP {
-	// Because it uses UDP, the destination doesn't actually have to exist.
-	// This will give us the IP address we would normally use to connect out.
-	garbageIP := "192.0.2.100"
-
-	conn, err := net.Dial("udp", garbageIP+":80")
-	if err != nil {
-		utils.LogError(utils.Error, err, "Couldn't obtain outbound IP address")
-		os.Exit(utils.ERR_GENERIC)
-	}
-	defer conn.Close()
-
-	// We only want to IP, not "IP:port"
-	localIP := conn.LocalAddr().(*net.UDPAddr)
-
-	return localIP.IP
-}
-
 func printBanner() {
 	pwntsBannerDivider := "============================================="
 	pwntsBanner :=
@@ -365,7 +346,7 @@ func main() {
 	db = utils.GetDatabaseHandle()
 
 	utils.Log(utils.Info, "Opened database file")
-	defer utils.CloseDatabase(db)
+	defer utils.Close(db)
 
 	// Validate the database connection and structure
 	utils.ValidateDatabaseExit(db)
@@ -373,7 +354,7 @@ func main() {
 	if argTest {
 		localIP = "127.0.0.1"
 	} else {
-		localIP = getOutboundIP().String()
+		localIP = utils.GetOutboundIP().String()
 	}
 
 	// Set up TLS (encrypted) listener to listen for agent callbacks
