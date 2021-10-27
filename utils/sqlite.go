@@ -31,7 +31,7 @@ func GetDatabaseHandle() *sql.DB {
 		Log(Error, "db == nil, this should never happen")
 		os.Exit(ERR_DATABASE_INVALID)
 	} else {
-		Log(Info, "Opened database file")
+		Log(Done, "Opened database file")
 	}
 
 	return db
