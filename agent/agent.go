@@ -38,7 +38,7 @@ var (
 	serverPublicKey string = "555"
 	// TODO: Change agentUUID back to a proper value
 	//agentUUID uuid.UUID = uuid.New()
-	agentUUID, _                 = uuid.Parse("76b8a692-f7be-4f51-b72a-86244a66e680")
+	agentUUID, _                 = uuid.Parse("ef1a6a78-0d95-490a-a07f-9607e00b96ce")
 	agentInfo    agentInfoStruct = agentInfoStruct{ServerPublicKey: serverPublicKey, AgentUUID: agentUUID}
 	localPort    int             = 1337
 	localAddress net.TCPAddr     = net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort}

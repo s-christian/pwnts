@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -47,8 +48,14 @@ func registerAgent(agentUUID string, teamID int) { //, serverPrivateKey string, 
 	defer utils.Close(addAgentStatement)
 
 	// TODO: Randomly generate this crypto keypair
-	serverPrivateKey := "555"
-	agentPublicKey := "555"
+	// Temporary random number generators to satisfy the unique constraint
+	randSource := rand.NewSource(time.Now().UnixNano())
+	seededRand := rand.New(randSource)
+	serverPrivateKey := seededRand.Intn(1000)
+
+	randSource = rand.NewSource(time.Now().UnixNano())
+	seededRand = rand.New(randSource)
+	agentPublicKey := seededRand.Intn(1000)
 
 	createdDate := int(time.Now().Unix())
 	rootDate := 0 // no agents have root status until proven by their first callback
@@ -75,18 +82,17 @@ func validateTeamID(teamID int) {
 	utils.ValidateDatabaseExit(db)
 	defer utils.Close(db)
 
-	validateTeamIDSQL := `
-		SELECT team_id, name, created_date_unix FROM Teams
-		WHERE team_id = ?
-	`
+	validateTeamIDSQL := "SELECT team_id, name, created_date_unix FROM Teams WHERE team_id = ?"
 	validateTeamIDStatement, err := db.Prepare(validateTeamIDSQL)
 	utils.CheckErrorExit(utils.Error, err, utils.ERR_STATEMENT, "[!] Could not create ValidateTeamID statement")
+	defer utils.Close(validateTeamIDStatement)
 
 	var dbTeamID int
 	var dbTeamName string
-	var dbTeamCreatedDate int64 // stored as UNIX time, seconds since epoch, not a time.Duration
+	var dbTeamCreatedDate int // stored as UNIX time, seconds since epoch, not a time.Duration
 	err = validateTeamIDStatement.QueryRow(teamID).Scan(&dbTeamID, &dbTeamName, &dbTeamCreatedDate)
 	if err == sql.ErrNoRows { // invalid Team ID (doesn't exist)
+		fmt.Printf("%d, %d %s %d\n", teamID, dbTeamID, dbTeamName, dbTeamCreatedDate)
 		color.New(color.FgRed, color.Bold).Println("[!] Team ID", fmt.Sprint(teamID), "does not exist")
 		os.Exit(utils.ERR_INPUT)
 	}
@@ -95,7 +101,7 @@ func validateTeamID(teamID int) {
 		os.Exit(utils.ERR_QUERY)
 	}
 
-	utils.Log(utils.Done, "[+] Team '"+dbTeamName+"' (ID "+fmt.Sprint(teamID)+", created "+time.Unix(dbTeamCreatedDate, 0).Format(time.RFC3339)+") is valid")
+	utils.Log(utils.Done, "Team '"+dbTeamName+"' (ID "+fmt.Sprint(teamID)+", created "+time.Unix(int64(dbTeamCreatedDate), 0).Format(time.RFC3339)+") is valid")
 }
 
 // Flag: --register-targets
@@ -207,13 +213,13 @@ func main() {
 	// Flag: --init-db
 	if argInitDB {
 		initializeDatabase()
-		os.Exit(0)
+		os.Exit(utils.EXIT_SUCCESS)
 	}
 
 	// Flag: --register-targets
 	if argRegisterTargetsFromFile != "" {
 		registerTargetsFromFile(argRegisterTargetsFromFile)
-		os.Exit(0)
+		os.Exit(utils.EXIT_SUCCESS)
 	}
 
 	// Flag: --register-agent
@@ -225,6 +231,7 @@ func main() {
 
 		validateTeamID(argTeamID)
 		registerAgent(argRegisterAgentUUID, argTeamID)
+		os.Exit(utils.EXIT_SUCCESS)
 	}
 
 	// If this is reached, no command-line flag (action) has been specified.

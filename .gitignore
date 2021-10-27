@@ -1,6 +1,7 @@
 # Database files
 *.sqbpro
 *.db
+*.db-journal
 
 # Certificates
 *.pem

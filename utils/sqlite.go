@@ -9,11 +9,6 @@ import (
 	"github.com/fatih/color"
 )
 
-var (
-	CurrentDirectory, _        = os.Getwd()
-	DatabaseFilepath    string = CurrentDirectory + "/server/" + DatabaseFilename // default
-)
-
 const (
 	DatabaseFilename string = "pwnts.db" // default
 
@@ -21,6 +16,11 @@ const (
 	ERR_STATEMENT        int = 21
 	ERR_QUERY            int = 22
 	ERR_SCAN             int = 23
+)
+
+var (
+	CurrentDirectory, _        = os.Getwd()
+	DatabaseFilepath    string = CurrentDirectory + "/server/" + DatabaseFilename // default
 )
 
 func GetDatabaseHandle() *sql.DB {

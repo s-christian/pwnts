@@ -1,6 +1,10 @@
 package main
 
 /*
+	Add flag for port number
+*/
+
+/*
 	Flags:
 		--test:				Sets the server's listener to listen on localhost instead of the proper
 							network interface IP address.
@@ -11,7 +15,6 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"math"
 	"net"
 	"os"
 	"strings"
@@ -26,33 +29,14 @@ import (
 )
 
 const (
-	localPort string        = "444"
-	minTime   time.Duration = 1 * time.Minute
-	maxTime   time.Duration = 15 * time.Minute
+	localPort       string        = "444"
+	minCallbackTime time.Duration = 1 * time.Minute
 )
 
 var (
 	localIP string
 	db      *sql.DB
 )
-
-func calculatePoints(timeDifference time.Duration, targetValue int) int {
-	// Only care about minutes, in cases where a callback might be 5 milliseconds off or something negligible we don't care about.
-	// We don't want to round on minimum time, but rounding on maximum time is fine.
-	// 14.50 => 15, 15.49 => 15
-	if timeDifference.Round(time.Minute) > maxTime {
-		return 1 // only 1 point
-	}
-
-	// Exponential decay in point value
-	// 1.2^(-0.9(x-1))
-	// 1 minute = 100 points, 5 minutes = 52 points, 10 minutes = 23 points, 15 minutes = 10 points
-	// Since UNIX time is used, accuracy is down to the second
-	// Score is calculated as minutes between callbacks
-	const baseValue float64 = 1.2
-	const decayValue float64 = -0.9
-	return int(math.Round(float64(targetValue) * math.Pow(baseValue, (decayValue*(float64(timeDifference/time.Minute)-1)))))
-}
 
 func handleConnection(conn net.Conn) {
 	// At the end, close the connection with error checking using the anonymous function
@@ -220,12 +204,12 @@ func handleConnection(conn net.Conn) {
 			// Agent called back too soon, must be greater than minTime, skip this callback
 			// We don't want any rounding here
 			// If the Agent is looping 1 minute at a time, then theoretically callbacks should never be less than 1 minute (only maybe more)
-			if checkinTimeDifference < minTime {
-				utils.Log(utils.Warning, "\t\t\tAgent called back too soon, ignoring ("+checkinTimeDifference.String()+" < "+minTime.String()+")")
+			if checkinTimeDifference < minCallbackTime {
+				utils.Log(utils.Warning, "\t\t\tAgent called back too soon, ignoring ("+checkinTimeDifference.String()+" < "+minCallbackTime.String()+")")
 				return
 			}
 
-			callbackPoints = calculatePoints(checkinTimeDifference, dbTargetValue)
+			callbackPoints = utils.CalculateCallbackPoints(checkinTimeDifference, dbTargetValue)
 
 			utils.Log(utils.Done, "\t\t\tTime between callbacks = "+checkinTimeDifference.String()+", worth", fmt.Sprint(callbackPoints), "points")
 		}

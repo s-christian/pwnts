@@ -53,12 +53,6 @@ var (
 // }
 
 func serveLayoutTemplate(writer http.ResponseWriter, request *http.Request, functionName string, pageContent map[string]template.HTML) {
-	// htmlFilepath := utils.CurrentDirectory + "site/pages/" + htmlFilename
-	// pageHTML, err := os.ReadFile(htmlFilepath)
-	// if utils.CheckWebError(writer, request, err, "Could not read '/"+htmlFilename+"' page", functionName) {
-	// 	return
-	// }
-
 	layoutTemplateFilepath := utils.CurrentDirectory + "/site/templates/layout.html"
 	layoutTemplate, err := template.ParseFiles(layoutTemplateFilepath)
 	if utils.CheckWebError(writer, request, err, functionName+": Can't parse template", functionName) {
@@ -77,7 +71,7 @@ func returnTemplateHTML(writer http.ResponseWriter, request *http.Request, htmlF
 		return ""
 	}
 
-	// Return templated HTML
+	// Construct templated HTML, store as a string
 	var contentHTML bytes.Buffer
 	err = contentTemplate.Execute(&contentHTML, pageContent)
 	if utils.CheckWebError(writer, request, err, functionName+": Couldn't execute template", functionName) {
@@ -89,30 +83,16 @@ func returnTemplateHTML(writer http.ResponseWriter, request *http.Request, htmlF
 		return template.HTML(`<p style="color: red; font-weight: bold;">Error fetching page content</p>`)
 	}
 
+	// Return templated HTML
 	return template.HTML(contentHTML.String())
 }
 
 func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
-	// dashboardPageHTMLFile := utils.CurrentDirectory + "site/pages/dashboard.html"
-	// dashboardPageHTML, err := os.ReadFile(dashboardPageHTMLFile)
-	// if utils.CheckWebError(writer, request, err, "Could not read '/dashboard.html' page", "handleDashboardPage") {
-	// 	return
-	// }
-
 	dashboardContent := map[string]template.HTML{"testString": "Hello, Dashboard!"}
 	dashboardHTML := returnTemplateHTML(writer, request, "dashboard.html", "handleDashboardPage", dashboardContent)
 
 	layoutContent := map[string]template.HTML{"title": "Red Team Dashboard", "pageContent": dashboardHTML}
 	serveLayoutTemplate(writer, request, "handleDashboardPage", layoutContent)
-
-	// generalTemplate, err := template.ParseFiles("templates/general.html")
-	// if utils.CheckWebError(writer, request, err, "handleDashboardPage: Can't parse template", "handleDashboardPage") {
-	// 	return
-	// }
-	// err = generalTemplate.Execute(writer, dashboardContent)
-	// if utils.CheckWebError(writer, request, err, "handleDashboardPage: Couldn't execute template", "handleDashboardPage") {
-	// 	return
-	// }
 }
 
 func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
@@ -121,19 +101,9 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 
 	layoutContent := map[string]template.HTML{"title": "Login", "pageContent": loginHTML}
 	serveLayoutTemplate(writer, request, "handleLoginPage", layoutContent)
-
-	// loginPageHTMLFile := utils.CurrentDirectory + "/site/pages/login.html"
-	// loginPageHTML, err := os.ReadFile(loginPageHTMLFile)
-	// if utils.CheckError(utils.Error, err, "Could not read '/login.html' page") {
-	// 	_, err = fmt.Fprint(writer, "Could not serve '"+request.Method+" "+request.URL.RequestURI()+"'")
-	// 	utils.CheckError(utils.Error, err, "handleLoginPage: Couldn't write to http.ResponseWriter")
-	// } else {
-	// 	_, err = fmt.Fprint(writer, string(loginPageHTML))
-	// 	utils.CheckError(utils.Error, err, "handleLoginPage: Couldn't write to http.ResponseWriter")
-	// }
 }
 
-// JWT authentication middleware to authenticated API endpoints
+// JWT authentication middleware to authenticated pages and endpoints
 func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Header["Token"] == nil {
@@ -141,7 +111,7 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 		} else {
 			token, err := jwt.Parse(request.Header["Token"][0], func(token *jwt.Token) (interface{}, error) {
 				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, fmt.Errorf("There was an error")
+					return nil, fmt.Errorf("there was an error")
 				}
 				return jwtSigningKey, nil
 			})
@@ -150,6 +120,7 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 				fmt.Fprint(writer, err.Error())
 			}
 
+			// Allow access to page if token is valid
 			if token.Valid {
 				endpoint(writer, request)
 			}
@@ -164,7 +135,7 @@ func generateJWT() (string, error) {
 
 	claims["authorized"] = true
 	claims["user"] = "John Smith"
-	claims["exp"] = time.Now().Add(time.Minute * 30).Unix()
+	claims["exp"] = time.Now().Add(time.Minute * 30).Unix() // token expires after 30 minutes
 
 	tokenString, err := token.SignedString(jwtSigningKey)
 
@@ -172,31 +143,117 @@ func generateJWT() (string, error) {
 }
 
 func handleHomePage(writer http.ResponseWriter, request *http.Request) {
-	// loginContent := pageInfo{Title: "Login", Content: template.HTML("<p>Login</p>\n<p>Lorem ipsum...</p>")}
-	// serveGeneralTemplate(writer, request, "login.html", "handleLoginPage", &loginContent)
-	// jwt, err := generateJWT()
-	// if utils.CheckError(utils.Error, err, "Could not sign JWT") {
-	// 	_, err = fmt.Fprint(writer, err.Error())
-	// 	utils.CheckError(utils.Error, err, "handleHomePage: Couldn't write to http.ResponseWriter")
-	// } else {
-	// 	homePageHTMLFile := utils.CurrentDirectory + "/site/pages/index.html"
-	// 	homePageHTML, err := os.ReadFile(homePageHTMLFile)
-	// 	if utils.CheckError(utils.Error, err, "Could not read '/index.html' page") {
-	// 		_, err = fmt.Fprint(writer, "Could not serve '"+request.Method+" "+request.URL.RequestURI()+"'")
-	// 		utils.CheckError(utils.Error, err, "handleHomePage: Couldn't write to http.ResponseWriter")
-	// 	} else {
-	// 		_, err = fmt.Fprint(writer, string(homePageHTML)+"\n"+jwt)
-	// 		utils.CheckError(utils.Error, err, "handleHomePage: Couldn't write to http.ResponseWriter")
-	// 	}
-	// }
-
 	// Generate the data we want to pass to the page-specific template
 	jwt, err := generateJWT()
 	if utils.CheckWebError(writer, request, err, "Could not sign JWT", "handleHomePage") {
 		return
 	}
 
-	// The parameters to full the page-specific template
+	/* --- Scoreboard Table ---
+
+			Sorted by descending point value.
+
+			| Team Name | Points |
+			----------------------
+			| H4k0rz    | 150    |
+			| Team 3    | 45     |
+			| RedDead   | 7      |
+
+			Information needed:
+				Teams.team_id, Teams.name, AgentCheckins.agent_uuid, AgentCheckins.time_unix
+				Last two checkin times for each Agent (by their agent_uuid)
+
+	// ---old
+	SELECT Agents.team_id, LastCheckins.agent_uuid, LastCheckins.time_unix, LastCheckins.value, LastCheckins.callback_order
+	FROM (
+		SELECT AgentCheckins.agent_uuid, AgentCheckins.time_unix, AgentCheckins.target_ipv4_address, TargetsInScope.value, row_number() OVER (PARTITION BY AgentCheckins.agent_uuid, TargetsInScope.target_ipv4_address ORDER BY time_unix DESC) AS callback_order
+		FROM AgentCheckins
+		JOIN TargetsInScope
+		ON AgentCheckins.target_ipv4_address = TargetsInScope.target_ipv4_address
+		ORDER BY AgentCheckins.agent_uuid, AgentCheckins.target_ipv4_address
+	) AS LastCheckins
+	JOIN Agents
+	ON Agents.agent_uuid = LastCheckins.agent_uuid
+	WHERE callback_order <= 2
+	*/
+
+	// getLastTwoCallbacksSQL := `
+	// 	SELECT Agents.team_id, LastCheckins.agent_uuid, LastCheckins.time_unix, LastCheckins.value, LastCheckins.callback_order
+	// 	FROM (
+	// 		SELECT *
+	// 		FROM (
+	// 			SELECT AgentCheckins.agent_uuid, AgentCheckins.time_unix, AgentCheckins.target_ipv4_address, TargetsInScope.value, row_number() OVER (PARTITION BY AgentCheckins.agent_uuid, TargetsInScope.target_ipv4_address ORDER BY time_unix DESC) AS callback_order
+	// 			FROM AgentCheckins
+	// 			JOIN TargetsInScope
+	// 			ON AgentCheckins.target_ipv4_address = TargetsInScope.target_ipv4_address
+	// 			ORDER BY AgentCheckins.agent_uuid, AgentCheckins.target_ipv4_address
+	// 		)
+	// 		WHERE callback_order <= 2
+	// 	) AS LastCheckins
+	// 	JOIN Agents
+	// 	ON Agents.agent_uuid = LastCheckins.agent_uuid
+	// 	WHERE callback_order <= 2
+	// `
+	// getLastTwoCallbacksStatement, err := db.Prepare(getLastTwoCallbacksSQL)
+	// if utils.CheckWebError(writer, request, err, "Could not create GetLastTwoCallbacks statement", "handleHomePage") {
+	// 	return
+	// }
+
+	// rows, err := getLastTwoCallbacksStatement.Query()
+	// if utils.CheckWebError(writer, request, err, "Could not execute GetLastTwoCallbacks statement", "handleHomePage") {
+	// 	return
+	// }
+
+	// getTeamNameSQL := `
+	// 	SELECT name
+	// 	FROM Teams
+	// 	WHERE team_id = ?
+	// `
+	// getTeamNameStatement, err := db.Prepare(getTeamNameSQL)
+	// if utils.CheckWebError(writer, request, err, "Could not create GetTeamName statement", "handleHomePage") {
+	// 	return
+	// }
+
+	// //teamCurrentPointSum := map[int]int{}
+	// var dbTeamIDFirst int
+	// var dbTeamNameFirst string
+	// var dbAgentUUIDFirst string
+	// var dbAgentCallbackUnixFirst int
+	// for rows.Next() {
+	// 	// team_id, agent_uuid, time_unix, value, callback_order (1 or 2, 1 being first)
+	// 	// Compare second callback to the most recent one
+	// 	var dbTeamIDSecond int
+	// 	var dbTeamNameSecond string
+	// 	var dbAgentUUIDSecond string
+	// 	var dbAgentCallbackUnixSecond int
+
+	// 	err = rows.Scan(&dbTeamIDSecond, &dbAgentUUIDSecond, &dbAgentCallbackUnixSecond)
+	// 	if utils.CheckWebError(writer, request, err, "Could not scan GetLastTwoCallbacks rows", "handleHomePage") {
+	// 		return
+	// 	}
+
+	// 	// Calculated time between most recent two callbacks from one agent
+	// 	if dbAgentUUIDSecond == dbAgentUUIDFirst {
+	// 		checkinTimeDifference := time.Second * time.Duration(dbAgentCallbackUnixFirst-dbAgentCallbackUnixSecond) //time.Duration(time.Now().Unix()-dbLastAgentCheckin) * time.Second
+	// 		agentPoints := utils.CalculateCallbackPoints(checkinTimeDifference)
+	// 	}
+
+	// 	err = getTeamNameStatement.QueryRow(dbTeamID).Scan(&dbTeamName)
+	// 	if utils.CheckWebError(writer, request, err, "Could not execute GetTeamName statement", "handleHomePage") {
+	// 		return
+	// 	}
+
+	// 	dbTeamIDFirst = dbTeamIDSecond
+	// 	dbTeamNameFirst = dbTeamNameSecond
+	// 	dbAgentUUIDFirst = dbAgentUUIDSecond
+	// 	dbAgentCallbackUnixFirst = dbAgentCallbackUnixSecond
+
+	// }
+
+	// // Let go of db lock
+	// checkSourceIPInScopeStatement.Close()
+
+	// The parameters to fill the page-specific template
 	homeContent := map[string]template.HTML{"jwt": template.HTML(jwt)}
 	// The templated HTML of type template.HTML for proper rendering on the DOM
 	homeHTML := returnTemplateHTML(writer, request, "index.html", "handleHomePage", homeContent)
