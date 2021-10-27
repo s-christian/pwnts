@@ -1,3 +1,6 @@
+![GitHub last commit](https://img.shields.io/github/last-commit/s-christian/pwnts?style=flat&logo=github)
+![Lines of code](https://img.shields.io/tokei/lines/github/s-christian/pwnts?style=flat&logo=github)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/s-christian/pwnts?style=flat&logo=github)
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/s-christian/pwnts?style=flat&logo=go)
 
 This project is still very much a work in progress and is not intended to be used yet.
