@@ -8,6 +8,7 @@ package main
 	Flags:
 		--test:				Sets the server's listener to listen on localhost instead of the proper
 							network interface IP address.
+		--port:				Port to listen on.
 */
 
 import (
@@ -29,13 +30,11 @@ import (
 )
 
 const (
-	localPort       string        = "444"
 	minCallbackTime time.Duration = 1 * time.Minute
 )
 
 var (
-	localIP string
-	db      *sql.DB
+	db *sql.DB
 )
 
 func handleConnection(conn net.Conn) {
@@ -313,9 +312,10 @@ func main() {
 	// Optionally initialize database by creating tables with the "--init-db" flag
 	var argQuiet bool
 	var argTest bool
-
+	var argPort int
 	flag.BoolVar(&argQuiet, "quiet", false, "Don't print the banner")
 	flag.BoolVar(&argTest, "test", false, "Listen on localhost instead of the default interface's IP address")
+	flag.IntVar(&argPort, "port", 443, "Port to listen on")
 	flag.Parse()
 
 	if !argQuiet {
@@ -335,22 +335,24 @@ func main() {
 	// Validate the database connection and structure
 	utils.ValidateDatabaseExit(db)
 
+	var listenIP net.IP
 	if argTest {
-		localIP = "127.0.0.1"
+		listenIP = net.ParseIP("127.0.0.1")
 	} else {
-		localIP = utils.GetOutboundIP().String()
+		listenIP = utils.GetOutboundIP()
 	}
 
+	listenAddress := fmt.Sprintf("%s:%d", listenIP.String(), argPort)
+
 	// Set up TLS (encrypted) listener to listen for agent callbacks
-	localAddress := localIP + ":" + localPort
-	listener, err := setupListener(localAddress)
+	listener, err := setupListener(listenAddress)
 	if err != nil {
-		utils.LogError(utils.Error, err, "Couldn't set up listener on", localAddress)
+		utils.LogError(utils.Error, err, "Couldn't set up listener on", listenAddress)
 		os.Exit(1)
 	}
 	defer listener.Close()
 
-	utils.Log(utils.Done, "Listening on", localAddress)
+	utils.Log(utils.Done, "Listening on", listenAddress)
 	color.New(color.Bold, color.FgBlue).Printf("\n--------------- Listening for Callbacks ---------------\n")
 
 	// Process callbacks

@@ -10,12 +10,14 @@ package main
 	- Document all Docker stuff
 	- Serve web server within Docker
 - Front-end language
+- Use the W3C validator
 */
 
 /*
 	Flags:
 		--test:				Sets the server's listener to listen on localhost instead of the proper
 							network interface IP address.
+		--port:				Port to listen on.
 */
 
 import (
@@ -25,6 +27,7 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"net"
 	"net/http"
 	"time"
 
@@ -34,17 +37,12 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const (
-	listenPort string = ":443"
-)
-
 // In production don't commit or make public your jwtSigningKey
 // Here's a safer way by setting the MY_JWT_TOKEN environment variable:
 // var jwtSigningKey = os.Get("MY_JWT_TOKEN")
 var (
 	db            *sql.DB
 	jwtSigningKey []byte = []byte("verysecret")
-	listenIP      string
 )
 
 // func createCert() {
@@ -284,7 +282,9 @@ func handleRequests() {
 func main() {
 	//utils.Log(utils.Warning, "--- If you have not already done so, please run the server before running this ---")
 	var argTest bool
+	var argPort int
 	flag.BoolVar(&argTest, "test", false, "Listen on localhost instead of the default interface's IP address")
+	flag.IntVar(&argPort, "port", 443, "Port to listen on")
 	flag.Parse()
 
 	db = utils.GetDatabaseHandle() // `=` instead of `:=` to set the global variable
@@ -316,13 +316,14 @@ func main() {
 	/*
 		--- Main site ---
 	*/
+	var listenIP net.IP
 	if argTest {
-		listenIP = "127.0.0.1"
+		listenIP = net.ParseIP("127.0.0.1")
 	} else {
-		listenIP = utils.GetOutboundIP().String()
+		listenIP = utils.GetOutboundIP()
 	}
 
-	listenAddress := listenIP + listenPort
+	listenAddress := fmt.Sprintf("%s:%d", listenIP.String(), argPort)
 
 	utils.Log(utils.Done, "Running HTTPS server at", listenAddress)
 
