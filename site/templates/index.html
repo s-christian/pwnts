@@ -4,11 +4,14 @@
 					<tr>
 						<th>Team</th>
 						<th>Pwnts</th>
-						<th>Pwned Hosts</th>
+						<th>Pwns</th>
 					</tr>
-					{{ range $teamName, $scoreInfo := .scoreboardData }}<tr>
+					{{ if .scoreboardData }}{{ range $teamName, $scoreInfo := .scoreboardData }}<tr>
 						<td>{{ $teamName }}</td>
 						<td>{{ index . 0 }}</td>
 						<td>{{ index . 1 }}</td>
+					</tr>
+					{{ end }}{{ else }}<tr>
+						<td>No teams!</td>
 					</tr>{{ end }}
 				</table>
