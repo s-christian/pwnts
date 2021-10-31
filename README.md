@@ -5,6 +5,12 @@
 
 This project is still very much a work in progress and is not intended to be used yet.
 
+🎃 **Halloween update!**
+
+👻 *Theoretically*, this might be usable if you manually generate your Agents. The server should be complete, and the site's scoreboard for displaying teams' current scores should be working.
+
+I have not yet tested deploying multiple agents across multiple targets, but will soon. My immediate to-do is to get authenticated Agent generation working on the site.
+
 ---
 
 # Pwnts
