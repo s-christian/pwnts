@@ -25,7 +25,7 @@ Pwnts accounts are created and disseminated to each Red Team before the competit
 
 In-scope targets are registered with their worth, their *pwnd value*, which is then multiplied by an adjustable expoential decay factor. This factor is determined by callback frequency where more frequent callbacks means more ***pwnts***.
 
-***Pwnts*** (points) are kept track of us a current total, not a cumulative sum. If a defender removes your agent from their system, you will lose points! However, all Agent checkins are kept track of so that a sum can be calculated if you wish.
+***Pwnts*** (points) are kept track of as a current total, not a cumulative sum. If a defender removes your agent from their system, you will lose pwnts! However, all Agent checkins are kept track of so that a sum can be calculated if you wish.
 
 ## Web App vs Callback Server
 
