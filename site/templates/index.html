@@ -1,2 +1,17 @@
 <h2>Scoreboard</h2>
 <p style="font-size: 1rem; font-weight: bold;">{{ .jwt }}</p>`
+<table>
+	<tr>
+		<th>Team</th>
+		<th>Pwnts</th>
+		<th>Pwned Hosts</th>
+	</tr>
+	{{range $teamName, $scoreInfo := .scoreboardData}}
+	<tr>
+		<td>{{$teamName}}</td>
+		{{range $scoreInfo}}
+		<td>{{.}}</td>
+		{{end}}
+	</tr>
+	{{end}}
+</table>

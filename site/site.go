@@ -37,6 +37,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+const (
+	maxCallbackTime time.Duration = time.Minute * 15
+)
+
 // In production don't commit or make public your jwtSigningKey
 // Here's a safer way by setting the MY_JWT_TOKEN environment variable:
 // var jwtSigningKey = os.Get("MY_JWT_TOKEN")
@@ -62,7 +66,7 @@ func serveLayoutTemplate(writer http.ResponseWriter, request *http.Request, func
 	utils.CheckWebError(writer, request, err, functionName+": Couldn't execute template", functionName)
 }
 
-func returnTemplateHTML(writer http.ResponseWriter, request *http.Request, htmlFilename string, functionName string, pageContent map[string]template.HTML) template.HTML {
+func returnTemplateHTML(writer http.ResponseWriter, request *http.Request, htmlFilename string, functionName string, pageContent map[string]interface{}) template.HTML {
 	contentTemplateFilepath := utils.CurrentDirectory + "/site/templates/" + htmlFilename
 	contentTemplate, err := template.ParseFiles(contentTemplateFilepath)
 	if utils.CheckWebError(writer, request, err, functionName+": Can't parse template", functionName) {
@@ -86,7 +90,7 @@ func returnTemplateHTML(writer http.ResponseWriter, request *http.Request, htmlF
 }
 
 func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
-	dashboardContent := map[string]template.HTML{"testString": "Hello, Dashboard!"}
+	dashboardContent := map[string]interface{}{"testString": "Hello, Dashboard!"}
 	dashboardHTML := returnTemplateHTML(writer, request, "dashboard.html", "handleDashboardPage", dashboardContent)
 
 	layoutContent := map[string]template.HTML{"title": "Red Team Dashboard", "pageContent": dashboardHTML}
@@ -94,7 +98,7 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 }
 
 func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
-	loginContent := map[string]template.HTML{"testString": "Hello, Login!"}
+	loginContent := map[string]interface{}{"testString": "Hello, Login!"}
 	loginHTML := returnTemplateHTML(writer, request, "login.html", "handleLoginPage", loginContent)
 
 	layoutContent := map[string]template.HTML{"title": "Login", "pageContent": loginHTML}
@@ -173,86 +177,169 @@ func handleHomePage(writer http.ResponseWriter, request *http.Request) {
 	JOIN Agents
 	ON Agents.agent_uuid = LastCheckins.agent_uuid
 	WHERE callback_order <= 2
+
+	// ---also old
+	getLastTwoCallbacksSQL := `
+		SELECT Agents.team_id, LastCheckins.agent_uuid, LastCheckins.time_unix, LastCheckins.value, LastCheckins.callback_order
+		FROM (
+			SELECT *
+			FROM (
+				SELECT AgentCheckins.agent_uuid, AgentCheckins.time_unix, AgentCheckins.target_ipv4_address, TargetsInScope.value, row_number() OVER (PARTITION BY AgentCheckins.agent_uuid, TargetsInScope.target_ipv4_address ORDER BY time_unix DESC) AS callback_order
+				FROM AgentCheckins
+				JOIN TargetsInScope
+				ON AgentCheckins.target_ipv4_address = TargetsInScope.target_ipv4_address
+				ORDER BY AgentCheckins.agent_uuid, AgentCheckins.target_ipv4_address
+			)
+			WHERE callback_order <= 2
+		) AS LastCheckins
+		JOIN Agents
+		ON Agents.agent_uuid = LastCheckins.agent_uuid
+		WHERE callback_order <= 2
+	`
 	*/
+	getLastTwoCallbacksSQL := `
+		SELECT team_id, target_ipv4_address, value, time_unix, callback_order
+		FROM (
+			SELECT Agents.team_id, Callbacks.target_ipv4_address, Callbacks.value, Callbacks.time_unix, Callbacks.agent_uuid, row_number() OVER (PARTITION BY Agents.team_id, Callbacks.target_ipv4_address ORDER BY Callbacks.time_unix DESC) AS callback_order
+			FROM (
+				SELECT AgentCheckins.target_ipv4_address, TargetsInScope.value, AgentCheckins.time_unix, AgentCheckins.agent_uuid
+				FROM AgentCheckins
+				JOIN TargetsInScope
+				ON AgentCheckins.target_ipv4_address = TargetsInScope.target_ipv4_address
+			) AS Callbacks
+			JOIN Agents
+			ON Callbacks.agent_uuid = Agents.agent_uuid
+		)
+		WHERE callback_order <= 2
+	`
+	getLastTwoCallbacksStatement, err := db.Prepare(getLastTwoCallbacksSQL)
+	if utils.CheckWebError(writer, request, err, "Could not create GetLastTwoCallbacks statement", "handleHomePage") {
+		return
+	}
 
-	// getLastTwoCallbacksSQL := `
-	// 	SELECT Agents.team_id, LastCheckins.agent_uuid, LastCheckins.time_unix, LastCheckins.value, LastCheckins.callback_order
-	// 	FROM (
-	// 		SELECT *
-	// 		FROM (
-	// 			SELECT AgentCheckins.agent_uuid, AgentCheckins.time_unix, AgentCheckins.target_ipv4_address, TargetsInScope.value, row_number() OVER (PARTITION BY AgentCheckins.agent_uuid, TargetsInScope.target_ipv4_address ORDER BY time_unix DESC) AS callback_order
-	// 			FROM AgentCheckins
-	// 			JOIN TargetsInScope
-	// 			ON AgentCheckins.target_ipv4_address = TargetsInScope.target_ipv4_address
-	// 			ORDER BY AgentCheckins.agent_uuid, AgentCheckins.target_ipv4_address
-	// 		)
-	// 		WHERE callback_order <= 2
-	// 	) AS LastCheckins
-	// 	JOIN Agents
-	// 	ON Agents.agent_uuid = LastCheckins.agent_uuid
-	// 	WHERE callback_order <= 2
-	// `
-	// getLastTwoCallbacksStatement, err := db.Prepare(getLastTwoCallbacksSQL)
-	// if utils.CheckWebError(writer, request, err, "Could not create GetLastTwoCallbacks statement", "handleHomePage") {
-	// 	return
-	// }
+	rows, err := getLastTwoCallbacksStatement.Query()
+	if utils.CheckWebError(writer, request, err, "Could not execute GetLastTwoCallbacks statement", "handleHomePage") {
+		return
+	}
+	utils.Close(getLastTwoCallbacksStatement)
+	defer utils.Close(rows)
 
-	// rows, err := getLastTwoCallbacksStatement.Query()
-	// if utils.CheckWebError(writer, request, err, "Could not execute GetLastTwoCallbacks statement", "handleHomePage") {
-	// 	return
-	// }
+	getTeamNameSQL := `
+		SELECT name
+		FROM Teams
+		WHERE team_id = ?
+	`
+	getTeamNameStatement, err := db.Prepare(getTeamNameSQL)
+	if utils.CheckWebError(writer, request, err, "Could not create GetTeamName statement", "handleHomePage") {
+		return
+	}
+	defer utils.Close(getTeamNameStatement)
 
-	// getTeamNameSQL := `
-	// 	SELECT name
-	// 	FROM Teams
-	// 	WHERE team_id = ?
-	// `
-	// getTeamNameStatement, err := db.Prepare(getTeamNameSQL)
-	// if utils.CheckWebError(writer, request, err, "Could not create GetTeamName statement", "handleHomePage") {
-	// 	return
-	// }
+	// Only look at team_id and target_ipv4_address, multiple Agents from the same team on one host is fine,
+	// we just can't double count. The same Agent being on multiple targets is also perfectly fine.
+	teamPointsAndHosts := make(map[string][]int)
+	var (
+		dbTeamIDLast            int
+		dbTargetValueLast       int
+		dbAgentCallbackUnixLast int
+		agentDead               bool = false
+		singleCallback          bool = false
+	)
+	for rows.Next() {
+		if utils.CheckWebError(writer, request, rows.Err(), "Could not prepare next db row for scanning", "handleHomePage") {
+			return
+		}
 
-	// //teamCurrentPointSum := map[int]int{}
-	// var dbTeamIDFirst int
-	// var dbTeamNameFirst string
-	// var dbAgentUUIDFirst string
-	// var dbAgentCallbackUnixFirst int
-	// for rows.Next() {
-	// 	// team_id, agent_uuid, time_unix, value, callback_order (1 or 2, 1 being first)
-	// 	// Compare second callback to the most recent one
-	// 	var dbTeamIDSecond int
-	// 	var dbTeamNameSecond string
-	// 	var dbAgentUUIDSecond string
-	// 	var dbAgentCallbackUnixSecond int
+		// team_id, target_ip_address, value, time_unix, callback_order (1 or 2, 1 being first)
+		// Compare second callback to the most recent one
+		var (
+			dbTeamIDCurrent            int
+			dbTargetIpAddressCurrent   string
+			dbTargetValueCurrent       int
+			dbAgentCallbackUnixCurrent int
+			dbCallbackOrderCurrent     int
+		)
 
-	// 	err = rows.Scan(&dbTeamIDSecond, &dbAgentUUIDSecond, &dbAgentCallbackUnixSecond)
-	// 	if utils.CheckWebError(writer, request, err, "Could not scan GetLastTwoCallbacks rows", "handleHomePage") {
-	// 		return
-	// 	}
+		err = rows.Scan(&dbTeamIDCurrent, &dbTargetIpAddressCurrent, &dbTargetValueCurrent, &dbAgentCallbackUnixCurrent, &dbCallbackOrderCurrent)
+		if utils.CheckWebError(writer, request, err, "Could not scan GetLastTwoCallbacks rows", "handleHomePage") {
+			return
+		}
 
-	// 	// Calculated time between most recent two callbacks from one agent
-	// 	if dbAgentUUIDSecond == dbAgentUUIDFirst {
-	// 		checkinTimeDifference := time.Second * time.Duration(dbAgentCallbackUnixFirst-dbAgentCallbackUnixSecond) //time.Duration(time.Now().Unix()-dbLastAgentCheckin) * time.Second
-	// 		agentPoints := utils.CalculateCallbackPoints(checkinTimeDifference)
-	// 	}
+		//fmt.Printf("%d | %s | %d | %d | %d\n", dbTeamIDCurrent, dbTargetIpAddressCurrent, dbTargetValueCurrent, dbAgentCallbackUnixCurrent, dbCallbackOrderCurrent)
 
-	// 	err = getTeamNameStatement.QueryRow(dbTeamID).Scan(&dbTeamName)
-	// 	if utils.CheckWebError(writer, request, err, "Could not execute GetTeamName statement", "handleHomePage") {
-	// 		return
-	// 	}
+		if dbCallbackOrderCurrent == 1 {
+			var checkinTimeAgo time.Duration = time.Duration(time.Now().Unix()-int64(dbAgentCallbackUnixCurrent)) * time.Second
 
-	// 	dbTeamIDFirst = dbTeamIDSecond
-	// 	dbTeamNameFirst = dbTeamNameSecond
-	// 	dbAgentUUIDFirst = dbAgentUUIDSecond
-	// 	dbAgentCallbackUnixFirst = dbAgentCallbackUnixSecond
+			if checkinTimeAgo.Round(time.Second) > maxCallbackTime {
+				agentDead = true
+				continue // last callback was too long ago, assume Agent is dead
+			}
+			agentDead = false
 
-	// }
+			if singleCallback { // last row only had a single callback (the "pair" ended with callbackOrder == 1), add its points
+				var teamName string
+				err = getTeamNameStatement.QueryRow(dbTeamIDLast).Scan(&teamName)
+				if utils.CheckWebError(writer, request, err, "Could not get team name for Team ID"+fmt.Sprint(dbTeamIDLast), "handleHomePage") {
+					continue
+				}
 
-	// // Let go of db lock
-	// checkSourceIPInScopeStatement.Close()
+				// Create team in map if it doesn't already exist, otherwise just increment
+				if _, keyExists := teamPointsAndHosts[teamName]; keyExists {
+					teamPointsAndHosts[teamName][0] += dbTargetValueLast // a single (Agent's first) callback will initially receive the full target value
+					teamPointsAndHosts[teamName][1]++                    // increment num of pwned hosts
+				} else {
+					teamPointsAndHosts[teamName] = []int{dbTargetValueLast, 1}
+				}
+				continue
+			}
+			dbTeamIDLast = dbTeamIDCurrent
+			dbTargetValueLast = dbTargetValueCurrent
+			dbAgentCallbackUnixLast = dbAgentCallbackUnixCurrent
+			singleCallback = true // set for next iteration
+		} else if dbCallbackOrderCurrent == 2 {
+			singleCallback = false
+			if agentDead { // skip callback pair for dead Agents
+				continue
+			}
+
+			checkinTimeDifference := time.Second * time.Duration(dbAgentCallbackUnixLast-dbAgentCallbackUnixCurrent)
+
+			var teamName string
+			err = getTeamNameStatement.QueryRow(dbTeamIDCurrent).Scan(&teamName)
+			if utils.CheckWebError(writer, request, err, "Could not get team name for Team ID"+fmt.Sprint(dbTeamIDCurrent), "handleHomePage") {
+				continue
+			}
+
+			// Create team in map if it doesn't already exist, otherwise just increment
+			if _, keyExists := teamPointsAndHosts[teamName]; keyExists {
+				teamPointsAndHosts[teamName][0] += utils.CalculateCallbackPoints(checkinTimeDifference, dbTargetValueCurrent)
+				teamPointsAndHosts[teamName][1]++ // increment num of pwned hosts
+			} else {
+				teamPointsAndHosts[teamName] = []int{utils.CalculateCallbackPoints(checkinTimeDifference, dbTargetValueCurrent), 1}
+			}
+			//teamPointsAndHosts[teamName][0] += utils.CalculateCallbackPoints(checkinTimeDifference, dbTargetValueCurrent)
+			//teamPointsAndHosts[teamName][1]++ // increment num of pwned hosts
+		} else {
+			fmt.Println("I have no idea what happened:", dbCallbackOrderCurrent)
+		}
+	}
+
+	if singleCallback { // account for the very last row being a single callback
+		var teamName string
+		err = getTeamNameStatement.QueryRow(dbTeamIDLast).Scan(&teamName)
+		if !utils.CheckWebError(writer, request, err, "Could not get team name for Team ID"+fmt.Sprint(dbTeamIDLast), "handleHomePage") {
+			// Create team in map if it doesn't already exist, otherwise just increment
+			if _, keyExists := teamPointsAndHosts[teamName]; keyExists {
+				teamPointsAndHosts[teamName][0] += dbTargetValueLast // a single (Agent's first) callback will initially receive the full target value
+				teamPointsAndHosts[teamName][1]++                    // increment num of pwned hosts
+			} else {
+				teamPointsAndHosts[teamName] = []int{dbTargetValueLast, 1}
+			}
+		}
+	}
 
 	// The parameters to fill the page-specific template
-	homeContent := map[string]template.HTML{"jwt": template.HTML(jwt)}
+	homeContent := map[string]interface{}{"jwt": template.HTML(jwt), "scoreboardData": teamPointsAndHosts}
 	// The templated HTML of type template.HTML for proper rendering on the DOM
 	homeHTML := returnTemplateHTML(writer, request, "index.html", "handleHomePage", homeContent)
 

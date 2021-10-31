@@ -98,7 +98,7 @@ func handleConnection(conn net.Conn) {
 		// Agent is only testing connection, no additional processing needed
 		// Response looks like "UUID TEST"
 		if len(dataReceivedSplit) > 1 && dataReceivedSplit[1] == "TEST" {
-			utils.Log(utils.Done, "\t\t\tAgent is testing connection")
+			utils.Log(utils.Done, "\t\t\tAgent is testing connection, do nothing")
 			return
 		}
 
@@ -315,7 +315,7 @@ func main() {
 	var argPort int
 	flag.BoolVar(&argQuiet, "quiet", false, "Don't print the banner")
 	flag.BoolVar(&argTest, "test", false, "Listen on localhost instead of the default interface's IP address")
-	flag.IntVar(&argPort, "port", 443, "Port to listen on")
+	flag.IntVar(&argPort, "port", 444, "Port to listen on")
 	flag.Parse()
 
 	if !argQuiet {
