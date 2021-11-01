@@ -1,17 +1,20 @@
-				<h2>Scoreboard</h2>
-				<p style="font-size: 1rem; font-weight: bold;">{{ .jwt }}</p>`
-				<table>
-					<tr>
-						<th>Team</th>
-						<th>Pwnts</th>
-						<th>Pwns</th>
-					</tr>
-					{{ if .scoreboardData }}{{ range $teamName, $scoreInfo := .scoreboardData }}<tr>
-						<td>{{ $teamName }}</td>
-						<td>{{ index . 0 }}</td>
-						<td>{{ index . 1 }}</td>
-					</tr>
-					{{ end }}{{ else }}<tr>
-						<td>No teams!</td>
-					</tr>{{ end }}
+				<h1>Scoreboard</h1>
+				<table id="scoreboard">
+					<thead>
+						<tr>
+							<th>Team</th>
+							<th>Pwnts</th>
+							<th>Pwns</th>
+						</tr>
+					</thead>
+					<tbody>
+						{{ if .scoreboardData }}{{ range $teamName, $scoreInfo := .scoreboardData }}<tr>
+							<td>{{ $teamName }}</td>
+							<td>{{ index . 0 }}</td>
+							<td>{{ index . 1 }}</td>
+						</tr>
+						{{ end }}{{ else }}<tr>
+							<td>No teams!</td>
+						</tr>{{ end }}
+					</tbody>
 				</table>

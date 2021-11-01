@@ -1,15 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 	<head>
+		<title>{{ .title }} | Pwnts</title>
 		<meta charSet="utf-8"/>
 		<meta name="description" content="Pwnts - Watch in real time as your systems get pwned."/>
 		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"/>
 		<link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32"/>
 		<link rel="icon" type="image/png" href="/favicon-16x16.png" sizes="16x16"/>
 		<link rel="stylesheet" href="/static/styles/style.css"/>
-		<title>{{ .title }} | Pwnts</title>
+		<link rel="stylesheet" href="/static/styles/scanlines.css" id="scanlinesStylesheet"/>
+		<script src="/static/js/cookies.js"></script>
+		<script src="/static/js/common.js"></script>
 	</head>
 	<body>
+		<audio id="introVoice" class="hidden" src="/static/audio/introduction.mp3" preload="auto"></audio>
+		<audio id="bgm" class="hidden" src="/static/audio/bgm.ogg" preload="auto" loop></audio>
+		<div id="options" >
+			<p id="options-header">Options</p>
+			<p id="options-close" class="hidden">X</p>
+			<fieldset id="options-list" class="hidden">
+				<legend>
+					<h4 style="margin: 0;">Options</h6>
+				</legend>
+				<p>Toggle scanlines</p>
+				<input name="scanlines" type="radio" value="on" checked>
+				Enabled
+				<input name="scanlines" type="radio" value="off">
+				Disabled
+				<p>Toggle background music</p>
+				<input name="bgm" type="radio" value="on" checked>
+				Play
+				<input name="bgm" type="radio" value="off">
+				Mute
+			</fieldset>
+		</div>
 		<div id="wrapper">
 			<nav>
 				<div>
@@ -21,7 +45,6 @@
 				</ul>
 			</nav>
 			<main>
-				<h1>Welcome to Pwnts</h1>
 {{ .pageContent }}
 			</main>
 		</div>

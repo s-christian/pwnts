@@ -145,13 +145,6 @@ func generateJWT() (string, error) {
 }
 
 func handleHomePage(writer http.ResponseWriter, request *http.Request) {
-	// Generate the data we want to pass to the page-specific template
-	// This is using a JWT as test data
-	jwt, err := generateJWT()
-	if utils.CheckWebError(writer, request, err, "Could not sign JWT", "handleHomePage") {
-		return
-	}
-
 	/*
 		--- Retrieve the last two Agent checkins grouped by team and target IP address ---
 	*/
@@ -290,7 +283,7 @@ func handleHomePage(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	// The parameters to fill the page-specific template
-	homeContent := map[string]interface{}{"jwt": template.HTML(jwt), "scoreboardData": teamsPointsAndHosts}
+	homeContent := map[string]interface{}{"scoreboardData": teamsPointsAndHosts}
 	// The templated HTML of type template.HTML for proper rendering on the DOM
 	homeHTML := returnTemplateHTML(writer, request, "index.html", "handleHomePage", homeContent)
 

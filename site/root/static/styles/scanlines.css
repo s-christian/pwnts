@@ -1,0 +1,40 @@
+/* Scanlines effect */
+body:before {
+	content: "";
+	position: fixed;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	z-index: 100;
+	background-image: url(/static/images/scanlines1.png);
+	background-repeat: all;
+	background-position: 0 0;
+	animation-name: Scanlines;
+	animation-duration: 2s;
+	animation-iteration-count: infinite;
+	animation-timing-function: steps(4);
+	box-shadow: inset 0px 0px 10em rgba(0, 0, 0, 0.4);
+}
+body:after {
+	content: "";
+	position: fixed;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	z-index: 100;
+	background-image: url(/static/images/scanlines2.png);
+	background-repeat: all;
+	background-position: 0 0;
+	animation-name: Scanlines;
+	animation-duration: 0.8s;
+	animation-iteration-count: infinite;
+	animation-timing-function: steps(4);
+}
+@keyframes Scanlines {
+	0% { background-position: 0 0; }
+	100% { background-position: 0 4px; }
+}
