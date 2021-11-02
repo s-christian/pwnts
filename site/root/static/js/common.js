@@ -75,12 +75,12 @@ document.addEventListener("DOMContentLoaded", () => {
 		options = JSON.parse(getCookie("options"))
 
 		if (options.scanlines === false) { // "true" is the default
-			document.getElementsByName("scanlines").item(1).setAttribute("checked", true)
+			document.getElementById("scanlinesRadioOff").setAttribute("checked", true)
 			stopScanlines()
 		}
 
 		if (options.bgm === false) { // "true" is the default
-			document.getElementsByName("bgm").item(1).setAttribute("checked", true)
+			document.getElementById("bgmRadioOff").setAttribute("checked", true)
 			// TODO: Figure out why music still plays regardless upon startup
 			bgm.addEventListener("load", () => {
 				stopAudio(bgm)
@@ -94,7 +94,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		if (event.target.tagName !== "INPUT") return // we only care about when users click on the radio inputs
 		// Otherwise, adjust the options and set the "options" cookie
 		switch (event.target.name) {
-			case "scanlines":
+			case "scanlinesRadio":
 				if (event.target.value === "on") {
 					options.scanlines = true
 					startScanlines()
@@ -103,7 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
 					stopScanlines()
 				}
 				break
-			case "bgm":
+			case "bgmRadio":
 				if (event.target.value === "on") {
 					options.bgm = true
 					startMusic()
