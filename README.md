@@ -19,6 +19,8 @@ A Red Team tool for scoring during exercises and competitions.
 
 **Pwnts** is both an Agent callback server and a web application consisting of a publicly-accessible scoreboard and a private, Red Teams-only [Golang](https://golang.org/) binary Agent generator.
 
+Compiled Go binaries have ***zero dependencies***, and the web application likewise relies on no external resources. Everything is designed to be baked-in and ready to go.
+
 ## Premise
 
 Pwnts accounts are created and disseminated to each Red Team before the competition begins. Through the web application, authenticated Red Teamers are able to generate Golang binary Agents to run on their pwnd targets by providing values for a handful of parameters.
