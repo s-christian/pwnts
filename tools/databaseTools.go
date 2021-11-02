@@ -13,66 +13,14 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/s-christian/pwnts/utils"
 )
-
-// Flag: --register-agent
-func registerAgent(agentUUID string, teamID int) { //, serverPrivateKey string, agentPublicKey string, createdDate int, rootDate int) {
-	utils.Log(utils.Info, "Registering Agent", agentUUID)
-
-	// Check if the provided string is a valid UUID format
-	_, err := uuid.Parse(agentUUID)
-	utils.CheckErrorExit(utils.Error, err, utils.ERR_UUID, "Provided UUID string is not a valid UUID")
-
-	db := utils.GetDatabaseHandle()
-	// don't need to ValidateDatabaseExit() here since that's already done for us
-	// in validateTeamID(), always called before this function.
-	defer utils.Close(db)
-
-	addAgentSQL := `
-		INSERT INTO Agents(agent_uuid, team_id, server_private_key, agent_public_key, created_date_unix, root_date_unix)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`
-	addAgentStatement, err := db.Prepare(addAgentSQL)
-	if utils.CheckError(utils.Error, err, "\tCould not create AddTarget statement") {
-		return
-	}
-	defer utils.Close(addAgentStatement)
-
-	// TODO: Randomly generate this crypto keypair
-	// Temporary random number generators to satisfy the unique constraint
-	randSource := rand.NewSource(time.Now().UnixNano())
-	seededRand := rand.New(randSource)
-	serverPrivateKey := seededRand.Intn(1000)
-
-	randSource = rand.NewSource(time.Now().UnixNano())
-	seededRand = rand.New(randSource)
-	agentPublicKey := seededRand.Intn(1000)
-
-	createdDate := int(time.Now().Unix())
-	rootDate := 0 // no agents have root status until proven by their first callback
-
-	_, err = addAgentStatement.Exec(agentUUID, teamID, serverPrivateKey, agentPublicKey, createdDate, rootDate)
-	if utils.CheckError(utils.Warning, err, "\tCould not register Agent") {
-		return
-	}
-
-	// Count total Agents
-	agentsCount := db.QueryRow("SELECT COUNT(*) FROM Agents")
-	var numAgents int
-	agentsCount.Scan(&numAgents)
-
-	utils.Log(utils.Done, "\tRegistered Agent", agentUUID)
-	utils.Log(utils.Done, "\tThere are now", fmt.Sprint(numAgents), "registered Agents")
-}
 
 // Helper function called before registerAgent()
 func validateTeamID(teamID int) {
@@ -230,7 +178,7 @@ func main() {
 		}
 
 		validateTeamID(argTeamID)
-		registerAgent(argRegisterAgentUUID, argTeamID)
+		utils.RegisterAgent(argRegisterAgentUUID, argTeamID)
 		os.Exit(utils.EXIT_SUCCESS)
 	}
 
