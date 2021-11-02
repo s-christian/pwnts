@@ -1,17 +1,16 @@
-				<h1>Scoreboard</h1>
 				<table id="scoreboard">
 					<thead>
 						<tr>
-							<th>Team</th>
-							<th>Pwnts</th>
-							<th>Pwns</th>
+							<th><div class="float">Team</dib></th>
+							<th><div class="float">Pwnts</div></th>
+							<th><div class="float">Pwns</div></th>
 						</tr>
 					</thead>
 					<tbody>
 						{{ if .scoreboardData }}{{ range $teamName, $scoreInfo := .scoreboardData }}<tr>
-							<td>{{ $teamName }}</td>
-							<td>{{ index . 0 }}</td>
-							<td>{{ index . 1 }}</td>
+							<td class="tableTeam"><span>{{ $teamName }}</span></td>
+							<td class="tablePwnts">{{ index . 0 }}</td>
+							<td class="tablePwns">{{ index . 1 }}</td>
 						</tr>
 						{{ end }}{{ else }}<tr>
 							<td>No teams!</td>

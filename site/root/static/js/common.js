@@ -53,7 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	})
 
 
-	/* --- Toggle options visibility --- */
+	/* --- Toggle options box visibility --- */
 	const optionsHeader = document.getElementById("options-header")
 	optionsHeader.addEventListener("click", () => {
 		document.getElementById("options-close").classList.remove("hidden")
@@ -61,8 +61,8 @@ document.addEventListener("DOMContentLoaded", () => {
 		document.getElementById("options-header").classList.add("hidden")
 	})
 
-	const optionsClose = document.getElementById("options-close")
-	optionsClose.addEventListener("click", () => {
+	const optionsX = document.getElementById("options-x")
+	optionsX.addEventListener("click", () => {
 		document.getElementById("options-header").classList.remove("hidden")
 		document.getElementById("options-list").classList.add("hidden")
 		document.getElementById("options-close").classList.add("hidden")

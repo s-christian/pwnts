@@ -17,10 +17,16 @@
 :root {
 	scroll-behavior: smooth;
 
-	--fonts-default: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+	--fonts-regular: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+	--fonts-default: 'Courier New', Courier, monospace;
 	--fonts-hacked: hacked, var(--fonts-default);
 	--fonts-orbitron: orbitron, var(--fonts-default);
-	--color-redteam-red: #760012;
+	--color-redteam-red: #bd2b41;
+	--color-blueteam-blue: #2f6fab;
+	--color-cloud: #777777;
+	--color-transparent-cloud: #777777C0;
+	--color-asphalt: #222222;
+	--color-transparent-asphalt: #222222F0;
 }
 
 html {
@@ -53,7 +59,6 @@ body {
 	text-align: left;
 	background-color: #44444480;
 	color: #BBBBBB;
-	font-family: 'Courier New', Courier, monospace;
 }
 #options-header {
 	margin: 0;
@@ -63,16 +68,19 @@ body {
 }
 #options-close {
 	margin: 0;
-	font-size: 1.5em;
-	font-weight: bold;
 	text-align: right;
-	color: red;
 }
-#options-header:hover, #options-close:hover {
+#options-x {
+	color: red;
+	font-weight: bold;
+	font-size: 1.5em;
+	padding: 0.125em 0.25em;
+}
+#options-header:hover, #options-x:hover {
 	cursor: url(/static/images/pointer.png), default;
 }
 #options fieldset {
-	border: 1px solid #2f6fab;
+	border: 1px solid var(--color-blueteam-blue);
 	margin: 1em 0 1em 0;
 	padding: 0 1em 1em;
 }
@@ -99,7 +107,7 @@ input:hover {
 }
 .subtitle {
 	font-family: var(--fonts-orbitron);
-	color: #777777;
+	color: var(--color-cloud);
 	font-size: 0.8em;
 }
 
@@ -112,7 +120,7 @@ a {
 nav {
 	margin-bottom: 1rem;
 	color: white;
-	background-color: #222222F0;
+	background-color: var(--color-transparent-asphalt);
 	box-shadow: 0 12px 10px 0 rgba(0,0,0,.8); /* x y blur spread color */
 	display: flex;
 	flex-direction: vertical;
@@ -142,11 +150,11 @@ nav a {
 	transition: 0.3s;
 }
 nav a:hover {
-	background-color: #777777;
+	background-color: var(--color-cloud);
 	color: red;
 	border: 0 2px 0 2px solid black;
 	font-size: 1.16em;
-	text-decoration: bold;
+	font-weight: bold;
 }
 nav li {
 	list-style: none inside none;
@@ -205,31 +213,109 @@ h6 {
 	margin-right: auto;
 }
 
+.float {
+	animation: float 4s ease-in-out infinite;
+}
 table {
-	border-collapse: separate;
-	border-spacing: 2px;
 	vertical-align: middle;
-	border: 1px solid black;
+	border-collapse: collapse;
+	border-style: hidden;
+	font-size: 1rem;
 }
 thead, tbody, tr, th ,td {
 	vertical-align: inherit;
 }
-tr {
-	border: 1px solid black;
-}
 th {
-	color: white;
-	background-color:#777777C0;
-	padding: 0.5rem;
-	border: 1px solid black;
+	font-family: var(--fonts-orbitron);
+	font-size: 2em;
+	font-weight: bold;
+	letter-spacing: 0.16em;
+	text-align: center;
+	animation: glow 2s ease-in-out infinite alternate;
+	-webkit-animation: glow 2s ease-in-out infinite alternate;
+	-moz-animation: glow 2s ease-in-out infinite alternate;
+	background-color: var(--color-transparent-asphalt);
+	padding: 1rem 1rem 0.25rem 1rem;
+	border-radius: 16px 16px 0 0;
 }
-td {
-	background-color: #E7573EC0;
-	padding: 0.5rem;
-	border: 1px solid black;
-	text-align: left;
+tbody {
+	font-family: var(--fonts-orbitron);
+}
+/* Setting the background color styling on every other row */
+tbody tr:nth-child(odd) td {
+	background-color: var(--color-blueteam-blue);
+}
+tbody tr:nth-child(even) td {
+	background-color: var(--color-redteam-red);
+}
+tbody tr:nth-child(odd) td:first-child {
+	background-color: transparent;
+	background-image: linear-gradient(to right, #77777700 0, var(--color-blueteam-blue) 33%);
+}
+tbody tr:nth-child(odd) td:last-child {
+	background-color: transparent;
+	background-image: linear-gradient(to left, #77777700 0, var(--color-blueteam-blue) 33%);
+}
+tbody tr:nth-child(even) td:first-child {
+	background-color: transparent;
+	background-image: linear-gradient(to right, #77777700 0, var(--color-redteam-red) 33%);
+}
+tbody tr:nth-child(even) td:last-child {
+	background-color: transparent;
+	background-image: linear-gradient(to left, #77777700 0, var(--color-redteam-red) 33%);
+}
+/* Special wiggle effect for the first-place team */
+tbody tr:first-child td:first-child span {
+	display: inline-block; /* "inline" elements like span can't transform */
+	animation: wiggle 2s ease-in-out infinite;
+}
+.tableTeam {
+	color: white;
+	text-shadow: 2px 2px 2px var(--color-asphalt);
+}
+.tablePwnts {
+	color: greenyellow;
+}
+.tablePwns {
+	color: orange;
 }
 
+td {
+	font-size: 1.5em;
+	font-weight: bold;
+	padding: 0.5rem 1rem;
+	text-align: left;
+	border: 2px solid black;
+}
+
+
+/* Keyframes, animations */
+@keyframes float {
+	0%   { transform: translate(0, 0);       }
+	50%  { transform: translate(0, -0.5rem); }
+	100% { transform: translate(0, 0);       }
+}
+@keyframes glow {
+	0% {
+		/*color: rgb(63, 151, 192);*/
+		color: red;
+		text-shadow: 0 0.125rem 10px var(--color-cloud);
+	}
+	100% {
+		color: white;
+		text-shadow: 0 0.5rem 20px rgb(255, 0, 191);
+	}
+}
+@keyframes wiggle {
+	0%   { transform: rotate(0);      }
+	25%  { transform: rotate(3deg);  }
+	50%  { transform: rotate(0);      }
+	75%  { transform: rotate(-3deg); }
+	100% { transform: rotate(0);      }
+}
+
+
+/* Media queries for mobile device scaling */
 @media screen and (max-width: 1400px) {
 	#options {
 		top: initial;
@@ -268,5 +354,16 @@ td {
 	}
 	nav li {
 		font-size: 1.5rem;
+	}
+	main {
+		padding: 1rem;
+	}
+	table {
+		font-size: 0.5rem !important;
+		width: 100%;
+	}
+	td {
+		font-size: 2em;
+		padding: 1rem 1rem;
 	}
 }
