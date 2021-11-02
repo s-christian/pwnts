@@ -15,6 +15,8 @@ I have not yet tested deploying multiple agents across multiple targets, but wil
 
 # Pwnts
 
+![Website Preview](images/website_preview.png)
+
 A Red Team tool for scoring during exercises and competitions.
 
 **Pwnts** is both an Agent callback server and a web application consisting of a publicly-accessible scoreboard and a private, Red Teams-only [Golang](https://golang.org/) binary Agent generator.
