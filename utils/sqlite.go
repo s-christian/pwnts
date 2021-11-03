@@ -157,3 +157,28 @@ func GetTeamNames(db *sql.DB) ([]string, error) {
 
 	return teamNames, err
 }
+
+func GetUserPasswordHash(db *sql.DB, username string) (string, error) {
+	var dbPasswordHash string
+
+	getUserPasswordHashSQL := `
+		SELECT password_hash
+		FROM Teams
+		WHERE name = ?
+	`
+	getUserPasswordHashStatement, err := db.Prepare(getUserPasswordHashSQL)
+	if err != nil {
+		return dbPasswordHash, err
+	}
+
+	passwordHashRow := getUserPasswordHashStatement.QueryRow(username)
+	Close(getUserPasswordHashStatement)
+
+	err = passwordHashRow.Scan(&dbPasswordHash)
+	// We don't want to return an error if the user simply doesn't exist
+	if err != nil && err != sql.ErrNoRows {
+		return dbPasswordHash, err
+	}
+
+	return dbPasswordHash, nil // return hash; if hash == "", user doesn't exist
+}

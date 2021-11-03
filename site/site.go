@@ -24,6 +24,7 @@ import (
 	//"crypto/tls"
 	"bytes"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"html/template"
@@ -107,36 +108,90 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 
 // JWT authentication middleware to authenticated pages and endpoints
 func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Header["Token"] == nil {
-			fmt.Fprint(writer, "Not Authorized")
-		} else {
-			token, err := jwt.Parse(request.Header["Token"][0], func(token *jwt.Token) (interface{}, error) {
-				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, fmt.Errorf("there was an error")
+	return http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			authCookie, err := request.Cookie("auth")
+			if err != nil {
+				fmt.Fprint(writer, "Not authorized")
+				return
+			} else {
+				token, err := jwt.Parse(
+					authCookie.Value,
+					func(token *jwt.Token) (interface{}, error) {
+						if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+							return nil, errors.New("error parsing jwt: incorrect signing method")
+						}
+
+						// Return the signing key for token validation
+						return jwtSigningKey, nil
+					},
+				)
+
+				// Token is not not a proper JWT
+				if utils.CheckError(utils.Warning, err, "Could not parse JWT for authentication") {
+					fmt.Fprint(writer, "Not authorized")
+					return
 				}
-				return jwtSigningKey, nil
-			})
 
-			if utils.CheckError(utils.Error, err, "Invalid JWT, could not parse") {
-				fmt.Fprint(writer, err.Error())
-			}
+				// Check if token is otherwise valid
+				if !token.Valid {
+					fmt.Fprint(writer, "JWT token is invalid, cannot authenticate")
+					return
+				}
 
-			// Allow access to page if token is valid
-			if token.Valid {
+				// Validate token claims (the payload data)
+				tokenClaims := token.Claims.(jwt.MapClaims)
+
+				if tokenClaims["user"] == nil || tokenClaims["teamId"] == nil {
+					fmt.Fprint(writer, "Not authorized, invalid token")
+					return
+				}
+
+				var tokenUser string
+				var tokenTeamID int
+				tokenUser = tokenClaims["user"].(string)
+				fmt.Sscan(tokenClaims["teamId"].(string), &tokenTeamID)
+
+				// Make sure the token isn't expired (current time > exp).
+				// Automatically uses the standard "exp" claim, a timestamp in UNIX seconds.
+				if tokenClaims.Valid() != nil {
+					fmt.Fprint(writer, "Token has expired, please log in again")
+					return
+				}
+
+				// Validate our custom claims data
+				if tokenUser == "" {
+					fmt.Fprint(writer, "Not authorized, invalid user")
+					return
+				}
+				if tokenTeamID < 1 {
+					fmt.Fprint(writer, "Not authorized, invalid teamId")
+					return
+				}
+
+				// If everything was successful, navigate to the page
 				endpoint(writer, request)
 			}
-		}
-	})
+		},
+	)
 }
 
-func generateJWT() (string, error) {
+func generateJWT(username string, teamID int) (string, error) {
+	/*
+		--- Token Payload (Claims) ---
+		"user": <team_name>,
+		"teamId": <team_id>,
+		"exp": <timestamp_unix_seconds>
+
+		JWT is stored as a cookie with the name "auth"
+	*/
+
 	token := jwt.New(jwt.SigningMethodHS256)
 
 	claims := token.Claims.(jwt.MapClaims)
 
-	claims["authorized"] = true
-	claims["user"] = "John Smith"
+	claims["user"] = username
+	claims["teamId"] = teamID
 	claims["exp"] = time.Now().Add(time.Minute * 30).Unix() // token expires after 30 minutes
 
 	tokenString, err := token.SignedString(jwtSigningKey)
@@ -283,8 +338,7 @@ func handleRequests() {
 	// TODO: Add request logging
 	http.HandleFunc("/", handleHomePage)
 	http.HandleFunc("/login", handleLoginPage)
-	http.HandleFunc("/dashboard", handleDashboardPage)
-	//http.Handle("/dashboard", isAuthorized(handleDashboardPage))
+	http.Handle("/dashboard", isAuthorized(handleDashboardPage))
 }
 
 func main() {

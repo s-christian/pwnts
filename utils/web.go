@@ -26,7 +26,7 @@ const (
 // Handle any errors encountered when trying to serve a web page
 func CheckWebError(writer http.ResponseWriter, request *http.Request, err error, errorMessage string, functionName string) bool {
 	if CheckError(Error, err, errorMessage) {
-		_, err := fmt.Fprint(writer, "Could not serve '"+request.Method+" "+request.URL.RequestURI()+"'")
+		_, err := fmt.Fprint(writer, "Internal error: cannot serve '"+request.Method+" "+request.URL.RequestURI()+"'")
 		CheckError(Error, err, functionName+": Couldn't write to http.ResponseWriter")
 		return true
 	}
@@ -53,7 +53,7 @@ func CalculateCallbackPoints(timeDifference time.Duration, targetValue int) int 
 
 func CheckPasswordHash(password string, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil // correct password if err == nil
+	return err == nil // err == nil means incorrect password
 }
 
 func HashPassword(password string) (string, error) {
@@ -123,6 +123,19 @@ func RegisterTeam(db *sql.DB, teamName string, teamPasswordHash string) error {
 	}
 
 	return err
+}
+
+/*
+	Validate user login, checking that the user exists and that their hashed password matches the hash in the database.
+
+	A bool is returned as well as an error (potentially nil) to distinguish between failed authentication and backend error.
+*/
+func ValidateLogin(db *sql.DB, username string, password string) (bool, error) {
+	passwordHash, err := GetUserPasswordHash(db, username)
+	if err != nil {
+		return false, err
+	}
+	return CheckPasswordHash(password, passwordHash), nil
 }
 
 func RegisterAgent(db *sql.DB, agentUUID string, teamID int) bool { //, serverPrivateKey string, agentPublicKey string, createdDate int, rootDate int) {
