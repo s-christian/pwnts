@@ -11,6 +11,8 @@ package main
 	- Serve web server within Docker
 - Front-end language
 - Use the W3C validator
+- Change CheckWebError() calls to http.Error()
+	- I didn't know that function existed before... whoops
 */
 
 /*
@@ -112,13 +114,16 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 		func(writer http.ResponseWriter, request *http.Request) {
 			authCookie, err := request.Cookie("auth")
 			if err != nil {
-				fmt.Fprint(writer, "Not authorized")
+				//fmt.Fprint(writer, "Not authorized")
+				http.Redirect(writer, request, "/login", http.StatusFound)
 				return
 			} else {
 				token, err := jwt.Parse(
 					authCookie.Value,
 					func(token *jwt.Token) (interface{}, error) {
 						if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+							//fmt.Fprint(writer, "Not authorized")
+							http.Redirect(writer, request, "/login", http.StatusFound)
 							return nil, errors.New("error parsing jwt: incorrect signing method")
 						}
 
@@ -129,13 +134,15 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 
 				// Token is not not a proper JWT
 				if utils.CheckError(utils.Warning, err, "Could not parse JWT for authentication") {
-					fmt.Fprint(writer, "Not authorized")
+					//fmt.Fprint(writer, "Not authorized")
+					http.Redirect(writer, request, "/login", http.StatusFound)
 					return
 				}
 
 				// Check if token is otherwise valid
 				if !token.Valid {
-					fmt.Fprint(writer, "JWT token is invalid, cannot authenticate")
+					//fmt.Fprint(writer, "JWT token is invalid, cannot authenticate")
+					http.Redirect(writer, request, "/login", http.StatusFound)
 					return
 				}
 
@@ -143,7 +150,8 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 				tokenClaims := token.Claims.(jwt.MapClaims)
 
 				if tokenClaims["user"] == nil || tokenClaims["teamId"] == nil {
-					fmt.Fprint(writer, "Not authorized, invalid token")
+					//fmt.Fprint(writer, "Not authorized, invalid token")
+					http.Redirect(writer, request, "/login", http.StatusFound)
 					return
 				}
 
@@ -155,17 +163,20 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 				// Make sure the token isn't expired (current time > exp).
 				// Automatically uses the standard "exp" claim, a timestamp in UNIX seconds.
 				if tokenClaims.Valid() != nil {
-					fmt.Fprint(writer, "Token has expired, please log in again")
+					//fmt.Fprint(writer, "Token has expired, please log in again")
+					http.Redirect(writer, request, "/login", http.StatusFound)
 					return
 				}
 
 				// Validate our custom claims data
 				if tokenUser == "" {
-					fmt.Fprint(writer, "Not authorized, invalid user")
+					//fmt.Fprint(writer, "Not authorized, invalid user")
+					http.Redirect(writer, request, "/login", http.StatusFound)
 					return
 				}
 				if tokenTeamID < 1 {
-					fmt.Fprint(writer, "Not authorized, invalid teamId")
+					//fmt.Fprint(writer, "Not authorized, invalid teamId")
+					http.Redirect(writer, request, "/login", http.StatusFound)
 					return
 				}
 
