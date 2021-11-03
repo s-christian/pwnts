@@ -98,7 +98,7 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 }
 
 func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
-	loginContent := map[string]interface{}{"testString": "Hello, Login!"}
+	loginContent := map[string]interface{}{}
 	loginHTML := returnTemplateHTML(writer, request, "login.html", "handleLoginPage", loginContent)
 
 	layoutContent := map[string]template.HTML{"title": "Login", "pageContent": loginHTML}
@@ -179,38 +179,15 @@ func handleHomePage(writer http.ResponseWriter, request *http.Request) {
 	/*
 		--- Retrieve all team names and initialize the map ---
 	*/
-	getTeamNamesSQL := `
-		SELECT name
-		FROM Teams
-	`
-	getTeamNamesStatement, err := db.Prepare(getTeamNamesSQL)
-	if utils.CheckWebError(writer, request, err, "Could not create GetTeamName statement", "handleHomePage") {
+	teamNames, err := utils.GetTeamNames(db)
+	if utils.CheckWebError(writer, request, err, "Could not retrieve list of Team names", "handleHomePage") {
 		return
 	}
 
-	teamNamesRows, err := getTeamNamesStatement.Query()
-	if utils.CheckWebError(writer, request, err, "Could not execute GetTeamNames statement", "handleHomePage") {
-		return
+	teamsPointsAndHosts := map[string][]int{}
+	for _, teamName := range teamNames {
+		teamsPointsAndHosts[teamName] = []int{0, 0}
 	}
-	utils.Close(getTeamNamesStatement)
-
-	teamsPointsAndHosts := make(map[string][]int)
-	for teamNamesRows.Next() {
-		if utils.CheckWebError(writer, request, lastTwoCallbacksRows.Err(), "Could not prepare next db row for scanning GetTeamNames rows", "handleHomePage") {
-			return
-		}
-
-		var dbTeamName string
-
-		err = teamNamesRows.Scan(&dbTeamName)
-		if utils.CheckWebError(writer, request, err, "Could not scan GetTeamNames rows", "handleHomePage") {
-			return
-		}
-
-		// Initialize the pwnts and pwns per team to 0
-		teamsPointsAndHosts[dbTeamName] = []int{0, 0}
-	}
-	utils.Close(teamNamesRows)
 
 	// Scoring note:
 	// Multiple Agents from the same team on the same host is fine.

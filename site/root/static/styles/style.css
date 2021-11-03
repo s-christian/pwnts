@@ -45,6 +45,9 @@ body {
 	word-wrap: break-word;
 }
 
+label {
+	cursor: url(/static/images/cursor.png), default;
+}
 .hidden {
 	display: none;
 }
@@ -87,7 +90,7 @@ body {
 #options legend {
 	padding: 0 0.5em;
 }
-input:hover {
+#options input:hover {
 	cursor: url(/static/images/pointer.png), default;
 }
 
@@ -286,6 +289,47 @@ td {
 	padding: 0.5rem 1rem;
 	text-align: left;
 	border: 2px solid black;
+}
+
+#login {
+	display: inline-block;
+	padding: 2rem;
+	border: 2px solid black;
+	border-radius: 8px;
+}
+form {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+.formGroup {
+	display: inline-block;
+	text-align: left;
+	width: fit-content;
+}
+.formGroup label {
+	font-family: var(--fonts-orbitron);
+	display: block;
+}
+.formGroup input {
+	padding: 1rem;
+	margin-bottom: 0.5rem;
+	border: 1px solid var(--color-asphalt);
+}
+input[type="submit"] {
+	font-family: var(--fonts-hacked);
+	font-size: 1.5em;
+	cursor: url(/static/images/pointer.png), default;
+	width: 100%;
+	border: 2px solid black;
+	background-color: white;
+	padding: 0.5rem 2rem;
+	transition: 0.5s;
+}
+input[type="submit"]:hover {
+	background-color: var(--color-transparent-asphalt);
+	color: white;
 }
 
 

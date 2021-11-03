@@ -37,6 +37,8 @@ func GetDatabaseHandle() *sql.DB {
 	return db
 }
 
+// Count the number of tables in the database and ensure it equals the expected value.
+// TODO: validate table names, not just number of tables.
 func ValidateDatabase(db *sql.DB) bool {
 	Log(Info, "Validating database")
 
@@ -101,13 +103,15 @@ func ValidateDatabase(db *sql.DB) bool {
 	}
 }
 
-// Same as ValidateDatabase(db), but exit when invalid
+// Same as `ValidateDatabase(db)`, but exit when invalid
 func ValidateDatabaseExit(db *sql.DB) {
 	if !ValidateDatabase(db) {
 		os.Exit(ERR_DATABASE_INVALID)
 	}
 }
 
+// Utiliy to close an object that implements the `io.Closer` interface.
+// Used over `object.Close()` for automatic error checking.
 func Close(closable io.Closer) {
 	CheckError(Error, closable.Close(), "Failed to close")
 }
@@ -115,3 +119,41 @@ func Close(closable io.Closer) {
 // func CloseDatabase(db *sql.DB) {
 // 	CheckError(Error, db.Close(), "Failed to close database connection")
 // }
+
+func GetTeamNames(db *sql.DB) ([]string, error) {
+	var teamNames []string
+	var err error
+
+	getTeamNamesSQL := `
+		SELECT name
+		FROM Teams
+	`
+	getTeamNamesStatement, err := db.Prepare(getTeamNamesSQL)
+	if err != nil {
+		return teamNames, err
+	}
+
+	teamNamesRows, err := getTeamNamesStatement.Query()
+	if err != nil {
+		return teamNames, err
+	}
+	Close(getTeamNamesStatement)
+
+	for teamNamesRows.Next() {
+		err = teamNamesRows.Err()
+		if err != nil {
+			return teamNames, err
+		}
+
+		var dbTeamName string
+		err = teamNamesRows.Scan(&dbTeamName)
+		if err != nil {
+			return teamNames, err
+		}
+
+		teamNames = append(teamNames, dbTeamName)
+	}
+	Close(teamNamesRows)
+
+	return teamNames, err
+}

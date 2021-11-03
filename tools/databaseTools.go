@@ -5,6 +5,9 @@ package main
 		--init-db:			Initialize the database by creating the Teams and Agents Sqlite3 tables.
 		--register-targets:	Add targets by their IP address and point value. Targets are defined
 							in the file "targets.txt" in the CSV format "ip,point_value".
+		--register-team:	Create a team with --team-name and --team-password.
+			--team-name:		The name of the team.
+			--team-password:	The plaintext password for the team (to be hashed with bcrypt).
 		--register-agent:	Register an Agent UUID.
 */
 
@@ -17,20 +20,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/s-christian/pwnts/utils"
 )
 
 // Helper function called before registerAgent()
-func validateTeamID(teamID int) {
+func validateTeamID(db *sql.DB, teamID int) {
 	utils.Log(utils.Info, "Validating Team ID")
 
-	db := utils.GetDatabaseHandle()
-	utils.ValidateDatabaseExit(db)
-	defer utils.Close(db)
-
-	validateTeamIDSQL := "SELECT team_id, name, created_date_unix FROM Teams WHERE team_id = ?"
+	validateTeamIDSQL := `
+		SELECT team_id, name, created_date_unix
+		FROM Teams
+		WHERE team_id = ?
+	`
 	validateTeamIDStatement, err := db.Prepare(validateTeamIDSQL)
 	utils.CheckErrorExit(utils.Error, err, utils.ERR_STATEMENT, "[!] Could not create ValidateTeamID statement")
 	defer utils.Close(validateTeamIDStatement)
@@ -40,25 +42,16 @@ func validateTeamID(teamID int) {
 	var dbTeamCreatedDate int // stored as UNIX time, seconds since epoch, not a time.Duration
 	err = validateTeamIDStatement.QueryRow(teamID).Scan(&dbTeamID, &dbTeamName, &dbTeamCreatedDate)
 	if err == sql.ErrNoRows { // invalid Team ID (doesn't exist)
-		fmt.Printf("%d, %d %s %d\n", teamID, dbTeamID, dbTeamName, dbTeamCreatedDate)
-		color.New(color.FgRed, color.Bold).Println("[!] Team ID", fmt.Sprint(teamID), "does not exist")
-		os.Exit(utils.ERR_INPUT)
+		utils.CheckErrorExit(utils.Error, err, utils.ERR_INPUT, "Team ID", fmt.Sprint(teamID), "does not exist")
 	}
-	if err != nil { // genuine DB error
-		color.New(color.FgRed, color.Bold).Println("[!] Could not execute ValidateTeamID statement")
-		os.Exit(utils.ERR_QUERY)
-	}
+	utils.CheckErrorExit(utils.Error, err, utils.ERR_QUERY, "Could not execute ValidateTeamID statement") // genuine db error
 
 	utils.Log(utils.Done, "Team '"+dbTeamName+"' (ID "+fmt.Sprint(teamID)+", created "+time.Unix(int64(dbTeamCreatedDate), 0).Format(time.RFC3339)+") is valid")
 }
 
 // Flag: --register-targets
-func registerTargetsFromFile(filename string) {
+func registerTargetsFromFile(db *sql.DB, filename string) {
 	utils.Log(utils.Info, "Registering targets:")
-
-	db := utils.GetDatabaseHandle()
-	utils.ValidateDatabaseExit(db)
-	defer utils.Close(db)
 
 	fullFilePath := utils.CurrentDirectory + filename
 	targetsFile, err := os.Open(fullFilePath)
@@ -148,11 +141,17 @@ func main() {
 	// Flags can be used with '--name' or '-name', doesn't matter.
 	var argInitDB bool
 	var argRegisterTargetsFromFile string
+	var argRegisterTeam bool
+	var argRegisterTeamName string
+	var argRegisterTeamPassword string
 	var argRegisterAgentUUID string
 	var argTeamID int
 
 	flag.BoolVar(&argInitDB, "init-db", false, "Initialize the database by creating the Teams and Agents Sqlite3 tables")
 	flag.StringVar(&argRegisterTargetsFromFile, "register-targets", "", "Add targets by their IP address and point value. Targets are defined in the file \"targets.txt\" in the CSV format \"ip,point_value\".")
+	flag.BoolVar(&argRegisterTeam, "register-team", false, "Create a team with --team-name and --team-password.")
+	flag.StringVar(&argRegisterTeamName, "team-name", "", "The name of the team.")
+	flag.StringVar(&argRegisterTeamPassword, "team-password", "", "The plaintext password for the team (to be hashed with bcrypt).")
 	flag.StringVar(&argRegisterAgentUUID, "register-agent", "", "Register an Agent UUID.")
 	flag.IntVar(&argTeamID, "team-id", -1, "The Team ID the Agent should belong to. (Required if using the `--register-agent` flag)")
 
@@ -164,27 +163,52 @@ func main() {
 		os.Exit(utils.EXIT_SUCCESS)
 	}
 
+	db := utils.GetDatabaseHandle()
+	utils.ValidateDatabaseExit(db)
+	defer utils.Close(db)
+
 	// Flag: --register-targets
 	if argRegisterTargetsFromFile != "" {
-		registerTargetsFromFile(argRegisterTargetsFromFile)
+		registerTargetsFromFile(db, argRegisterTargetsFromFile)
+		os.Exit(utils.EXIT_SUCCESS)
+	}
+
+	// Flag: --register-team
+	if argRegisterTeam {
+		if argRegisterTeamName == "" || argRegisterTeamPassword == "" {
+			utils.LogPlainExit(utils.Error, utils.ERR_USAGE, "A `--team-name` and `--team-password` must be provided")
+		}
+
+		passwordHash, err := utils.HashPassword(argRegisterTeamPassword)
+		if err != nil {
+			os.Exit(utils.ERR_INPUT)
+		}
+
+		err = utils.RegisterTeam(db, argRegisterTeamName, passwordHash)
+		if utils.CheckError(utils.Error, err, "Could not register Team") {
+			os.Exit(utils.ERR_QUERY)
+		}
 		os.Exit(utils.EXIT_SUCCESS)
 	}
 
 	// Flag: --register-agent
 	if argRegisterAgentUUID != "" {
 		if argTeamID == -1 {
-			color.New(color.FgRed, color.Bold).Println("[!] Please specify a `--team-id <integer>`")
-			os.Exit(utils.ERR_USAGE)
+			utils.LogPlainExit(utils.Error, utils.ERR_USAGE, "Please specify a `--team-id <integer>`")
 		}
 
-		validateTeamID(argTeamID)
-		utils.RegisterAgent(argRegisterAgentUUID, argTeamID)
+		validateTeamID(db, argTeamID)
+
+		if !utils.RegisterAgent(db, argRegisterAgentUUID, argTeamID) {
+			os.Exit(utils.ERR_GENERIC)
+		}
 		os.Exit(utils.EXIT_SUCCESS)
 	}
 
 	// If this is reached, no command-line flag (action) has been specified.
-	color.New(color.FgYellow, color.Bold).Println("[*] Please specify an action.")
-	color.New(color.FgMagenta).Println("------------------------------------------------------------")
+	// Print usage
+	utils.LogPlain(utils.Warning, "Please specify an action")
+	utils.MapTypesToColor[utils.Debug].Println("------------------------------------------------------------")
 	flag.Usage()
-	color.New(color.FgMagenta).Println("------------------------------------------------------------")
+	utils.MapTypesToColor[utils.Debug].Println("------------------------------------------------------------")
 }

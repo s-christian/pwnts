@@ -27,7 +27,7 @@ Compiled Go binaries have ***zero dependencies***, and the web application likew
 
 Pwnts accounts are created and disseminated to each Red Team before the competition begins. Through the web application, authenticated Red Teamers are able to generate Golang binary Agents to run on their pwnd targets by providing values for a handful of parameters.
 
-In-scope targets are registered with their worth, their *pwnd value*, which is then multiplied by an adjustable expoential decay factor. This factor is determined by callback frequency where more frequent callbacks means more ***pwnts***.
+In-scope targets are registered with their value which is then multiplied by an adjustable expoential decay factor. This factor is determined by callback frequency where more frequent callbacks means more ***pwnts***.
 
 ***Pwnts*** (points) are kept track of as a current total, not a cumulative sum. If a defender removes your agent from their system, you will lose pwnts! However, all Agent checkins are kept track of so that a sum can be calculated if you wish.
 

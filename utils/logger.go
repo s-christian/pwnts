@@ -1,3 +1,4 @@
+// Utility functions for logging messages, errors, etc.
 package utils
 
 import (
@@ -50,7 +51,18 @@ var MapTypesToPrefix = map[logType]string{
 	Debug:   MapTypesToColor[Debug].Sprint("[?]"),
 }
 
-// Log a timestamped message with a given logType
+// `Log()` without a timestamp.
+func LogPlain(messageType logType, messages ...string) {
+	fmt.Printf("%s %s\n", MapTypesToPrefix[messageType], MapTypesToColor[messageType].Sprint(strings.Join(messages, " ")))
+}
+
+// Same as `LogPlain()`, but exit after logging.
+func LogPlainExit(messageType logType, errCode int, messages ...string) {
+	LogPlain(messageType, messages...)
+	os.Exit(errCode)
+}
+
+// Log a timestamped message with a given logType.
 func Log(messageType logType, messages ...string) {
 	fmt.Printf("%s (%s)\t%s\n",
 		MapTypesToPrefix[messageType],
@@ -59,7 +71,7 @@ func Log(messageType logType, messages ...string) {
 	)
 }
 
-// Return the log string instead of printing it
+// Return the `log()` string instead of printing it.
 func LogReturn(messageType logType, messages ...string) string {
 	return fmt.Sprintf("%s (%s)\t%s",
 		MapTypesToPrefix[messageType],
@@ -76,6 +88,7 @@ func LogError(messageType logType, err error, messages ...string) {
 	)
 }
 
+// `LogError()` if present and return `err == nil`.
 func CheckError(messageType logType, err error, messages ...string) bool {
 	if err != nil {
 		LogError(messageType, err, messages...)
@@ -84,7 +97,7 @@ func CheckError(messageType logType, err error, messages ...string) bool {
 	return false
 }
 
-// Same as CheckError() but exit on error
+// Same as CheckError() but exit on error.
 func CheckErrorExit(messageType logType, err error, errCode int, messages ...string) {
 	if CheckError(messageType, err, messages...) {
 		os.Exit(errCode)

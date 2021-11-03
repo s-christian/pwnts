@@ -1,17 +1,26 @@
+// Utility functions used be `site/site.go` and `tools/databaseTools.go`.
+// Functions in `web.go` should generally not interrupt the flow of the application by exiting on error. Instead, they should return their error status to be handled by the calling function.
 package utils
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/google/uuid"
 )
 
 const (
-	maxCallbackTime time.Duration = 15 * time.Minute
+	maxCallbackTime   time.Duration = 15 * time.Minute
+	maxTeamNameLength int           = 64
 )
 
 // Handle any errors encountered when trying to serve a web page
@@ -42,25 +51,94 @@ func CalculateCallbackPoints(timeDifference time.Duration, targetValue int) int 
 	return int(math.Round(float64(targetValue) * math.Pow(baseValue, (decayValue*(float64(timeDifference/time.Minute)-1)))))
 }
 
-func RegisterAgent(agentUUID string, teamID int) { //, serverPrivateKey string, agentPublicKey string, createdDate int, rootDate int) {
+func CheckPasswordHash(password string, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil // correct password if err == nil
+}
+
+func HashPassword(password string) (string, error) {
+	hashBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	CheckError(Error, err, "Could not hash provided password")
+
+	return string(hashBytes), err
+}
+
+/*
+	Register a new Team by its name and password hash.
+
+	Returns `EXIT_SUCCESS` upon successful Team creation.
+
+	Otherwise, upon error, returns one of `ERR_INPUT` (team name too long), `ERR_STATEMENT`, or `ERR_QUERY`.
+*/
+func RegisterTeam(db *sql.DB, teamName string, teamPasswordHash string) error {
+	Log(List, "Registering new Team")
+
+	var err error
+
+	// Check that team name <= maxTeamNameLength
+	if len(teamName) > maxTeamNameLength {
+		return errors.New("error registering team: team name can't be longer than " + fmt.Sprint(maxTeamNameLength) + " characters")
+	}
+
+	// Check that new team name doesn't match pre-existing team name, stripping special characters for the comparison
+	reg, err := regexp.Compile("[^a-zA-Z0-9]+")
+	if err != nil {
+		return err
+	}
+
+	dbTeamNames, err := GetTeamNames(db)
+	if err != nil {
+		return err
+	}
+	for _, dbTeamName := range dbTeamNames {
+		if strings.EqualFold(reg.ReplaceAllLiteralString(teamName, ""), reg.ReplaceAllLiteralString(dbTeamName, "")) {
+			return errors.New("error registering team: new team name is too similar to a pre-existing team name")
+		}
+	}
+
+	// Prepare statement
+	registerTeamSQL := `
+		INSERT INTO Teams(name, password_hash, created_date_unix)
+		VALUES (?, ?, ?)
+	`
+	registerTeamStatement, err := db.Prepare(registerTeamSQL)
+	if err != nil {
+		return err
+	}
+	defer Close(registerTeamStatement)
+
+	// Register Team
+	createdDate := int(time.Now().Unix())
+	registerTeamResult, err := registerTeamStatement.Exec(teamName, teamPasswordHash, createdDate)
+	if err != nil {
+		return err
+	}
+
+	// Print success (with possible warning of not knowing Team ID, if not returned by the database driver)
+	newTeamID, warn := registerTeamResult.LastInsertId()
+	if CheckError(Warning, warn, "Could not retrieve the ID for the newly-registered Team '"+teamName+"'") {
+		Log(Done, fmt.Sprintf("Team '%s' (ID: UNKNOWN) has been registered", teamName))
+	} else {
+		Log(Done, fmt.Sprintf("Team '%s' (ID: %d) has been registered", teamName, newTeamID))
+	}
+
+	return err
+}
+
+func RegisterAgent(db *sql.DB, agentUUID string, teamID int) bool { //, serverPrivateKey string, agentPublicKey string, createdDate int, rootDate int) {
 	Log(Info, "Registering Agent", agentUUID)
 
 	// Check if the provided string is a valid UUID format
 	_, err := uuid.Parse(agentUUID)
 	CheckErrorExit(Error, err, ERR_UUID, "Provided UUID string is not a valid UUID")
 
-	db := GetDatabaseHandle()
-	// don't need to ValidateDatabaseExit() here since that's already done for us
-	// in validateTeamID(), always called before this function.
-	defer Close(db)
-
 	addAgentSQL := `
 		INSERT INTO Agents(agent_uuid, team_id, server_private_key, agent_public_key, created_date_unix, root_date_unix)
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
 	addAgentStatement, err := db.Prepare(addAgentSQL)
-	if CheckError(Error, err, "\tCould not create AddTarget statement") {
-		return
+	if CheckError(Error, err, "\tCould not create AddAgent statement") {
+		return false
 	}
 	defer Close(addAgentStatement)
 
@@ -79,14 +157,18 @@ func RegisterAgent(agentUUID string, teamID int) { //, serverPrivateKey string, 
 
 	_, err = addAgentStatement.Exec(agentUUID, teamID, serverPrivateKey, agentPublicKey, createdDate, rootDate)
 	if CheckError(Warning, err, "\tCould not register Agent") {
-		return
+		return false
 	}
 
 	// Count total Agents
 	agentsCount := db.QueryRow("SELECT COUNT(*) FROM Agents")
 	var numAgents int
-	agentsCount.Scan(&numAgents)
+	err = agentsCount.Scan(&numAgents)
+	if CheckError(Error, err, "\tCould not scan GetAgentCount") {
+		return false
+	}
 
 	Log(Done, "\tRegistered Agent", agentUUID)
 	Log(Done, "\tThere are now", fmt.Sprint(numAgents), "registered Agents")
+	return true
 }

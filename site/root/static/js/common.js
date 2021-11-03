@@ -1,3 +1,8 @@
+/*
+	BUGS:
+		- If user options are set to mute music, music still plays when loading the page.
+*/
+
 document.addEventListener("DOMContentLoaded", () => {
 	/* --- Functions for options --- */
 	function stopScanlines() {
