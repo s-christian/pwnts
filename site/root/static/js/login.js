@@ -32,7 +32,16 @@ document.addEventListener("DOMContentLoaded", () => {
 	  
 		// Define what happens on successful data submission
 		loginRequest.addEventListener("load", (event) => {
-			displayLoginSuccess(loginFormStatus, event.target.responseText)
+			loginResponse = JSON.parse(event.target.responseText)
+			if (loginResponse.error) {
+				displayLoginError(loginFormStatus, loginResponse.error)
+			} else if (loginResponse.message) {
+				displayLoginSuccess(loginFormStatus, loginResponse.message)
+			} else {
+				displayLoginError(loginFormStatus, "Error communication with server")
+			}
+
+			loginForm.reset()
 		})
 	  
 		// Define what happens in case of error

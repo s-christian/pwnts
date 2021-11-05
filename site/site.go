@@ -6,13 +6,7 @@ package main
 	- Build another VM to test agent callbacks
 		- "Can build as many VMs as you feel the urge to build"
 	- Document all steps
-- Dockerize
-	- Document all Docker stuff
-	- Serve web server within Docker
-- Front-end language
 - Use the W3C validator
-- Change CheckWebError() calls to http.Error()
-	- I didn't know that function existed before... whoops
 */
 
 /*
@@ -23,9 +17,10 @@ package main
 */
 
 import (
-	//"crypto/tls"
 	"bytes"
+	//"crypto/tls"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -101,11 +96,79 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 }
 
 func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
-	loginContent := map[string]interface{}{}
-	loginHTML := returnTemplateHTML(writer, request, "login.html", "handleLoginPage", loginContent)
+	switch request.Method {
+	// GET: Display login form
+	case http.MethodGet:
+		loginContent := map[string]interface{}{}
+		loginHTML := returnTemplateHTML(writer, request, "login.html", "handleLoginPage", loginContent)
 
-	layoutContent := map[string]template.HTML{"title": "Login", "pageContent": loginHTML}
-	serveLayoutTemplate(writer, request, "handleLoginPage", layoutContent)
+		layoutContent := map[string]template.HTML{"title": "Login", "pageContent": loginHTML}
+		serveLayoutTemplate(writer, request, "handleLoginPage", layoutContent)
+
+	// POST: API to set the JWT cookie upon successful login and return success
+	case http.MethodPost:
+		// Necessary to populate the request.Form and request.PostForm attributes
+		request.ParseMultipartForm(1024)
+
+		// PostForm is of type url.Values which is of type map[string][]string
+		postedUsername := request.PostForm["username"][0]
+		postedPassword := request.PostForm["password"][0]
+
+		// https://pkg.go.dev/encoding/json#Marshal
+		type ReturnMessage struct {
+			Message string `json:"message"`
+			Error   string `json:"error",omitempty`
+		}
+
+		// loginResponse := ReturnMessage{}
+		jsonEncoder := json.NewEncoder(writer)
+
+		// Checking for empty form data should also be done on the client side with JavaScript
+		if postedUsername == "" || postedPassword == "" {
+			// Craft struct to return as JSON
+			// loginResponse.Error = "Please supply values for username and password"
+
+			// Send JSON back
+			writer.WriteHeader(http.StatusBadRequest) // set status code to 400: Bad Request
+			// err := jsonEncoder.Encode(loginResponse)
+			err := jsonEncoder.Encode(&ReturnMessage{Error: "Please supply values for username and password"})
+
+			// Check for encoding error
+			utils.CheckWebError(writer, request, err, "Could not encode login response to JSON", "handleLoginPage")
+
+			return
+		}
+
+		// Testing
+		//fmt.Fprintf(writer, "--- Received ---\nUsername: %s\nPassword: %s", postedUsername, postedPassword)
+
+		validLogin, err := utils.ValidateLogin(db, postedUsername, postedPassword)
+		if utils.CheckWebError(writer, request, err, "Error while validating user login", "handleLoginPage") {
+			return
+		}
+
+		// Invalid login: passwords do not match
+		if !validLogin {
+			// loginResponse.Error = "Invalid login"
+
+			// Send JSON back
+			writer.WriteHeader(http.StatusBadRequest) // set status code to 400: Bad Request
+			err := jsonEncoder.Encode(&ReturnMessage{Error: "Invalid login"})
+			//err := jsonEncoder.Encode(loginResponse)
+
+			// Check for encoding error
+			utils.CheckWebError(writer, request, err, "Could not encode login response to JSON", "handleLoginPage")
+
+			return
+		}
+
+		// Else, it must have been a valid login
+		// loginResponse.Message = "Authenticated!"
+
+		err = jsonEncoder.Encode(&ReturnMessage{Message: "Authenticated!"})
+		// err = jsonEncoder.Encode(loginResponse)
+		utils.CheckWebError(writer, request, err, "Could not encode login response to JSON", "handleLoginPage")
+	}
 }
 
 // JWT authentication middleware to authenticated pages and endpoints

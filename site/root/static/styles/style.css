@@ -317,11 +317,9 @@ td {
 }
 .formError {
 	background-color: #ce444480;
-	border-color: #df2f2f;
 }
 .formSuccess {
 	background-color: #64ce4480;
-	border-color: #246111;
 }
 .formGroup {
 	text-align: left;

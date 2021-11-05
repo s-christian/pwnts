@@ -158,6 +158,9 @@ func GetTeamNames(db *sql.DB) ([]string, error) {
 	return teamNames, err
 }
 
+// If err != nil, database error.
+//
+// If err == nil and hash == "", user doesn't exist.
 func GetUserPasswordHash(db *sql.DB, username string) (string, error) {
 	var dbPasswordHash string
 
