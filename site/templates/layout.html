@@ -13,8 +13,8 @@
 		<script src="/static/js/common.js"></script>
 	</head>
 	<body>
-		<audio id="introVoice" class="hidden" src="/static/audio/introduction.mp3" preload="auto"></audio>
-		<audio id="bgm" class="hidden" src="/static/audio/bgm.ogg" preload="auto" loop></audio>
+		<audio id="introVoice" class="hidden" src="/static/audio/introduction.mp3" type="audio/mp3" preload="auto"></audio>
+		<audio id="bgm" class="hidden" src="/static/audio/bgm.ogg" type="audio/ogg" preload="auto" loop></audio>
 		<div id="options" >
 			<p id="options-header">Options</p>
 			<p id="options-close" class="hidden"><span id="options-x">X</span></p>
@@ -37,7 +37,7 @@
 		<div id="wrapper">
 			<nav>
 				<div>
-					<span class="title">Pwnts</span><span class="subtitle"> | Red Team Scoreboard</span>
+					<a href="/"><span class="title">Pwnts</span></a><span class="subtitle">Red Team Scoreboard</span>
 				</div>
 				<ul>
 					<a href="/"><li>Scoreboard</li></a>
