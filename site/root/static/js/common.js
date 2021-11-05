@@ -40,6 +40,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		fadeInAudio(bgm, 0)
 	}
 
+	// Used for testing, unused, can likely be deleted
 	async function sleep(time) {
 		await new Promise((r) => setTimeout(r, time))
 	}
