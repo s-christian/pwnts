@@ -26,8 +26,14 @@ const (
 // Handle any errors encountered when trying to serve a web page
 func CheckWebError(writer http.ResponseWriter, request *http.Request, err error, errorMessage string, functionName string) bool {
 	if CheckError(Error, err, errorMessage) {
-		_, err := fmt.Fprint(writer, "Internal error: cannot serve '"+request.Method+" "+request.URL.RequestURI()+"'")
-		CheckError(Error, err, functionName+": Couldn't write to http.ResponseWriter")
+		http.Error(
+			writer,
+			fmt.Sprintf("Internal error: cannot serve '%s %s'\n%s",
+				request.Method,
+				request.URL.RequestURI(),
+				err.Error()),
+			http.StatusInternalServerError,
+		)
 		return true
 	}
 	return false
