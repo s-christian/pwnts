@@ -250,26 +250,26 @@ tbody {
 }
 /* Setting the background color styling on every other row */
 tbody tr:nth-child(odd) td {
-	background-color: var(--color-blueteam-blue);
+	background-color: var(--color-redteam-red);
 }
 tbody tr:nth-child(even) td {
-	background-color: var(--color-redteam-red);
+	background-color: var(--color-blueteam-blue);
 }
 tbody tr:nth-child(odd) td:first-child {
 	background-color: transparent;
-	background-image: linear-gradient(to right, #77777700 0, var(--color-blueteam-blue) 33%);
+	background-image: linear-gradient(to right, #77777700 0, var(--color-redteam-red) 33%);
 }
 tbody tr:nth-child(odd) td:last-child {
 	background-color: transparent;
-	background-image: linear-gradient(to left, #77777700 0, var(--color-blueteam-blue) 33%);
+	background-image: linear-gradient(to left, #77777700 0, var(--color-redteam-red) 33%);
 }
 tbody tr:nth-child(even) td:first-child {
 	background-color: transparent;
-	background-image: linear-gradient(to right, #77777700 0, var(--color-redteam-red) 33%);
+	background-image: linear-gradient(to right, #77777700 0, var(--color-blueteam-blue) 33%);
 }
 tbody tr:nth-child(even) td:last-child {
 	background-color: transparent;
-	background-image: linear-gradient(to left, #77777700 0, var(--color-redteam-red) 33%);
+	background-image: linear-gradient(to left, #77777700 0, var(--color-blueteam-blue) 33%);
 }
 /* Special wiggle effect for the first-place team */
 tbody tr:first-child td:first-child span {

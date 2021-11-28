@@ -1,7 +1,7 @@
 function setCookie(cname, cvalue) {
-	const now = new Date()
-	now.setTime(now.getTime() + (365 * 24 * 60 * 60 * 1000)) // cookies set to expire in one year
-	const expires = "expires=" + now.toUTCString()
+	const inAYear = new Date()
+	inAYear.setTime(inAYear.getTime() + (365 * 24 * 60 * 60 * 1000)) // cookies set to expire in one year
+	const expires = "expires=" + inAYear.toUTCString()
 	document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/;secure"
 }
 
