@@ -23,6 +23,11 @@ var (
 	DatabaseFilepath    string = CurrentDirectory + "/server/" + DatabaseFilename // default
 )
 
+/*
+	Return a handle to the application database.
+
+	Currently hardcoded to open utils.sqlite.DatabaseFilepath.
+*/
 func GetDatabaseHandle() *sql.DB {
 	// Open database
 	db, err := sql.Open("sqlite3", DatabaseFilepath) // "=" required instead of ":=" as to not declare a local `db` variable
@@ -37,8 +42,11 @@ func GetDatabaseHandle() *sql.DB {
 	return db
 }
 
-// Count the number of tables in the database and ensure it equals the expected value.
 // TODO: validate table names, not just number of tables.
+/*
+	Count the number of tables in the database and ensure it equals the
+	expected value.
+*/
 func ValidateDatabase(db *sql.DB) bool {
 	Log(Info, "Validating database")
 
@@ -103,85 +111,48 @@ func ValidateDatabase(db *sql.DB) bool {
 	}
 }
 
-// Same as `ValidateDatabase(db)`, but exit when invalid
+/*
+	Same as `ValidateDatabase(db)`, but exit when invalid.
+*/
 func ValidateDatabaseExit(db *sql.DB) {
 	if !ValidateDatabase(db) {
 		os.Exit(ERR_DATABASE_INVALID)
 	}
 }
 
-// Utiliy to close an object that implements the `io.Closer` interface.
-// Used over `object.Close()` for automatic error checking.
+/*
+	Utiliy to close an object that implements the `io.Closer` interface. Used
+	over `object.Close()` for automatic error checking.
+*/
 func Close(closable io.Closer) {
 	CheckError(Error, closable.Close(), "Failed to close")
 }
 
-// func CloseDatabase(db *sql.DB) {
-// 	CheckError(Error, db.Close(), "Failed to close database connection")
+/*
+	If err != nil, database error.
+	If err == nil and hash == "", user doesn't exist.
+*/
+// func GetUserPasswordHash(db *sql.DB, username string) (string, error) {
+// 	var dbPasswordHash string
+
+// 	getUserPasswordHashSQL := `
+// 		SELECT password_hash
+// 		FROM Teams
+// 		WHERE name = ?
+// 	`
+// 	getUserPasswordHashStatement, err := db.Prepare(getUserPasswordHashSQL)
+// 	if err != nil {
+// 		return dbPasswordHash, err
+// 	}
+
+// 	passwordHashRow := getUserPasswordHashStatement.QueryRow(username)
+// 	Close(getUserPasswordHashStatement)
+
+// 	err = passwordHashRow.Scan(&dbPasswordHash)
+// 	// We don't want to return an error if the user simply doesn't exist
+// 	if err != nil && err != sql.ErrNoRows {
+// 		return dbPasswordHash, err
+// 	}
+
+// 	return dbPasswordHash, nil // return hash; if hash == "", user doesn't exist
 // }
-
-func GetTeamNames(db *sql.DB) ([]string, error) {
-	var teamNames []string
-	var err error
-
-	getTeamNamesSQL := `
-		SELECT name
-		FROM Teams
-	`
-	getTeamNamesStatement, err := db.Prepare(getTeamNamesSQL)
-	if err != nil {
-		return teamNames, err
-	}
-
-	teamNamesRows, err := getTeamNamesStatement.Query()
-	if err != nil {
-		return teamNames, err
-	}
-	Close(getTeamNamesStatement)
-
-	for teamNamesRows.Next() {
-		err = teamNamesRows.Err()
-		if err != nil {
-			return teamNames, err
-		}
-
-		var dbTeamName string
-		err = teamNamesRows.Scan(&dbTeamName)
-		if err != nil {
-			return teamNames, err
-		}
-
-		teamNames = append(teamNames, dbTeamName)
-	}
-	Close(teamNamesRows)
-
-	return teamNames, err
-}
-
-// If err != nil, database error.
-//
-// If err == nil and hash == "", user doesn't exist.
-func GetUserPasswordHash(db *sql.DB, username string) (string, error) {
-	var dbPasswordHash string
-
-	getUserPasswordHashSQL := `
-		SELECT password_hash
-		FROM Teams
-		WHERE name = ?
-	`
-	getUserPasswordHashStatement, err := db.Prepare(getUserPasswordHashSQL)
-	if err != nil {
-		return dbPasswordHash, err
-	}
-
-	passwordHashRow := getUserPasswordHashStatement.QueryRow(username)
-	Close(getUserPasswordHashStatement)
-
-	err = passwordHashRow.Scan(&dbPasswordHash)
-	// We don't want to return an error if the user simply doesn't exist
-	if err != nil && err != sql.ErrNoRows {
-		return dbPasswordHash, err
-	}
-
-	return dbPasswordHash, nil // return hash; if hash == "", user doesn't exist
-}

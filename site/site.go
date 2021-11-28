@@ -55,26 +55,26 @@ var (
 func serveLayoutTemplate(writer http.ResponseWriter, request *http.Request, functionName string, pageContent map[string]template.HTML) {
 	layoutTemplateFilepath := utils.CurrentDirectory + "/site/templates/layout.html"
 	layoutTemplate, err := template.ParseFiles(layoutTemplateFilepath)
-	if utils.CheckWebError(writer, request, err, functionName+": Can't parse template", functionName) {
+	if utils.CheckWebError(writer, request, err, functionName+": Can't parse template") {
 		return
 	}
 
 	// Serve templated HTML
 	err = layoutTemplate.Execute(writer, pageContent)
-	utils.CheckWebError(writer, request, err, functionName+": Couldn't execute template", functionName)
+	utils.CheckWebError(writer, request, err, functionName+": Couldn't execute template")
 }
 
 func returnTemplateHTML(writer http.ResponseWriter, request *http.Request, htmlFilename string, functionName string, pageContent map[string]interface{}) template.HTML {
 	contentTemplateFilepath := utils.CurrentDirectory + "/site/templates/" + htmlFilename
 	contentTemplate, err := template.ParseFiles(contentTemplateFilepath)
-	if utils.CheckWebError(writer, request, err, functionName+": Can't parse template", functionName) {
+	if utils.CheckWebError(writer, request, err, functionName+": Can't parse template") {
 		return ""
 	}
 
 	// Construct templated HTML, store as a string
 	var contentHTML bytes.Buffer
 	err = contentTemplate.Execute(&contentHTML, pageContent)
-	if utils.CheckWebError(writer, request, err, functionName+": Couldn't execute template", functionName) {
+	if utils.CheckWebError(writer, request, err, functionName+": Couldn't execute template") {
 		return template.HTML(`<p style="color: red; font-weight: bold;">Error fetching page content</p>`)
 	}
 
@@ -97,7 +97,7 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 
 func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
-	// GET: Display login form
+	// *** GET: Display login form
 	case http.MethodGet:
 		loginContent := map[string]interface{}{}
 		loginHTML := returnTemplateHTML(writer, request, "login.html", "handleLoginPage", loginContent)
@@ -105,7 +105,7 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 		layoutContent := map[string]template.HTML{"title": "Login", "pageContent": loginHTML}
 		serveLayoutTemplate(writer, request, "handleLoginPage", layoutContent)
 
-	// POST: API to set the JWT cookie upon successful login and return success
+	// *** POST: API to set the JWT cookie upon successful login and return success
 	case http.MethodPost:
 		// Necessary to populate the request.Form and request.PostForm attributes
 		request.ParseMultipartForm(1024)
@@ -117,57 +117,79 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 		// https://pkg.go.dev/encoding/json#Marshal
 		type ReturnMessage struct {
 			Message string `json:"message"`
-			Error   string `json:"error",omitempty`
+			Error   bool   `json:"error"`
 		}
 
-		// loginResponse := ReturnMessage{}
 		jsonEncoder := json.NewEncoder(writer)
 
-		// Checking for empty form data should also be done on the client side with JavaScript
+		// --- Helper functions ---
+
+		returnSuccess := func(message string) {
+			// Send JSON response
+			err := jsonEncoder.Encode(&ReturnMessage{Message: message, Error: false})
+			// Check for encoding error
+			utils.CheckWebError(writer, request, err, "Could not encode login response to JSON")
+		}
+
+		returnError := func(message string) {
+			err := jsonEncoder.Encode(&ReturnMessage{Message: message, Error: true})
+			utils.CheckWebError(writer, request, err, "Could not encode login response to JSON")
+		}
+
+		returnUserError := func(message string) {
+			writer.WriteHeader(http.StatusUnauthorized)
+			returnError(message)
+		}
+
+		returnServerError := func(message string) {
+			writer.WriteHeader(http.StatusInternalServerError)
+			returnError(message)
+		}
+
+		// --- Logic ---
+
+		// Checking for empty form data should also be done on the client side
+		// with JavaScript. This is just a fallback.
 		if postedUsername == "" || postedPassword == "" {
-			// Craft struct to return as JSON
-			// loginResponse.Error = "Please supply values for username and password"
-
-			// Send JSON back
-			writer.WriteHeader(http.StatusBadRequest) // set status code to 400: Bad Request
-			// err := jsonEncoder.Encode(loginResponse)
-			err := jsonEncoder.Encode(&ReturnMessage{Error: "Please supply values for username and password"})
-
-			// Check for encoding error
-			utils.CheckWebError(writer, request, err, "Could not encode login response to JSON", "handleLoginPage")
-
+			returnUserError("Please supply values for username and password")
 			return
 		}
 
-		// Testing
-		//fmt.Fprintf(writer, "--- Received ---\nUsername: %s\nPassword: %s", postedUsername, postedPassword)
-
-		validLogin, err := utils.ValidateLogin(db, postedUsername, postedPassword)
-		if utils.CheckWebError(writer, request, err, "Error while validating user login", "handleLoginPage") {
+		teamId, _, passwordHash, _, err := utils.GetUserInfo(db, postedUsername)
+		if err == sql.ErrNoRows {
+			returnUserError("Invalid login")
+			return
+		} else if utils.CheckError(utils.Error, err, "Backend error querying database") {
+			returnUserError("Could not query database. Please contact an administrator.")
 			return
 		}
 
-		// Invalid login: passwords do not match
+		validLogin := utils.ValidatePasswordHash(postedPassword, passwordHash)
+
+		// Invalid login: user does not exist or passwords do not match
 		if !validLogin {
-			// loginResponse.Error = "Invalid login"
-
-			// Send JSON back
-			writer.WriteHeader(http.StatusBadRequest) // set status code to 400: Bad Request
-			err := jsonEncoder.Encode(&ReturnMessage{Error: "Invalid login"})
-			//err := jsonEncoder.Encode(loginResponse)
-
-			// Check for encoding error
-			utils.CheckWebError(writer, request, err, "Could not encode login response to JSON", "handleLoginPage")
-
+			returnUserError("Invalid login")
 			return
 		}
 
-		// Else, it must have been a valid login
-		// loginResponse.Message = "Authenticated!"
+		// Else, it is a valid login, so continue
 
-		err = jsonEncoder.Encode(&ReturnMessage{Message: "Authenticated!"})
-		// err = jsonEncoder.Encode(loginResponse)
-		utils.CheckWebError(writer, request, err, "Could not encode login response to JSON", "handleLoginPage")
+		// Set "auth" cookie to a signed JWT
+		newToken, err := generateJWT(postedUsername, teamId)
+		if utils.CheckError(utils.Error, err, "Could not generate JWT for valid user") {
+			returnServerError("Could not generate a JWT. Please contact an administrator.")
+			return
+		}
+
+		// At the end, redirect user to their team page
+		//defer http.Redirect(writer, request, "/dashboard", http.StatusFound)
+		// HTTP POST won't redirect. This has been done in client-side JavaScript instead.
+
+		authCookie := http.Cookie{Name: "auth", Value: newToken, Secure: true, HttpOnly: true}
+		http.SetCookie(writer, &authCookie)
+
+		utils.Log(utils.Done, "\t\tUser '"+postedUsername+"' successfully logged in")
+		returnSuccess("Greetings, hacker!")
 	}
 }
 
@@ -176,7 +198,7 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 	return http.HandlerFunc(
 		func(writer http.ResponseWriter, request *http.Request) {
 			authCookie, err := request.Cookie("auth")
-			if err != nil {
+			if err != nil { // cookie not found
 				//fmt.Fprint(writer, "Not authorized")
 				http.Redirect(writer, request, "/login", http.StatusFound)
 				return
@@ -195,43 +217,47 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 					},
 				)
 
-				// Token is not not a proper JWT
+				// Token is not a proper JWT, or does not use the correct signing method
 				if utils.CheckError(utils.Warning, err, "Could not parse JWT for authentication") {
 					//fmt.Fprint(writer, "Not authorized")
 					http.Redirect(writer, request, "/login", http.StatusFound)
 					return
 				}
 
-				// Check if token is otherwise valid
+				// Check if the JWT is valid
 				if !token.Valid {
 					//fmt.Fprint(writer, "JWT token is invalid, cannot authenticate")
 					http.Redirect(writer, request, "/login", http.StatusFound)
 					return
 				}
 
-				// Validate token claims (the payload data)
+				// --- Validate token claims (the payload data) ---
 				tokenClaims := token.Claims.(jwt.MapClaims)
 
+				// Ensure the claims we need exist in the first place
 				if tokenClaims["user"] == nil || tokenClaims["teamId"] == nil {
 					//fmt.Fprint(writer, "Not authorized, invalid token")
 					http.Redirect(writer, request, "/login", http.StatusFound)
 					return
 				}
 
-				var tokenUser string
-				var tokenTeamID int
-				tokenUser = tokenClaims["user"].(string)
-				fmt.Sscan(tokenClaims["teamId"].(string), &tokenTeamID)
-
 				// Make sure the token isn't expired (current time > exp).
-				// Automatically uses the standard "exp" claim, a timestamp in UNIX seconds.
+				// Automatically uses the RFC standard "exp" claim, a timestamp in UNIX seconds.
 				if tokenClaims.Valid() != nil {
 					//fmt.Fprint(writer, "Token has expired, please log in again")
+					// Delete the expired auth cookie
+					newAuthCookie := http.Cookie{Name: "auth", Value: "", MaxAge: -1, Secure: true, HttpOnly: true}
+					http.SetCookie(writer, &newAuthCookie)
 					http.Redirect(writer, request, "/login", http.StatusFound)
 					return
 				}
 
-				// Validate our custom claims data
+				// Give the claims a Go type
+				var tokenUser string = tokenClaims["user"].(string)
+				// Go's JSON unmarshalling decodes JSON numbers to type float64
+				var tokenTeamID int = int(tokenClaims["teamId"].(float64))
+
+				// Validate the claims
 				if tokenUser == "" {
 					//fmt.Fprint(writer, "Not authorized, invalid user")
 					http.Redirect(writer, request, "/login", http.StatusFound)
@@ -295,12 +321,12 @@ func handleHomePage(writer http.ResponseWriter, request *http.Request) {
 		WHERE callback_order <= 2
 	`
 	getLastTwoCallbacksStatement, err := db.Prepare(getLastTwoCallbacksSQL)
-	if utils.CheckWebError(writer, request, err, "Could not create GetLastTwoCallbacks statement", "handleHomePage") {
+	if utils.CheckWebError(writer, request, err, "Could not create GetLastTwoCallbacks statement") {
 		return
 	}
 
 	lastTwoCallbacksRows, err := getLastTwoCallbacksStatement.Query()
-	if utils.CheckWebError(writer, request, err, "Could not execute GetLastTwoCallbacks statement", "handleHomePage") {
+	if utils.CheckWebError(writer, request, err, "Could not execute GetLastTwoCallbacks statement") {
 		return
 	}
 	utils.Close(getLastTwoCallbacksStatement)
@@ -309,7 +335,7 @@ func handleHomePage(writer http.ResponseWriter, request *http.Request) {
 		--- Retrieve all team names and initialize the map ---
 	*/
 	teamNames, err := utils.GetTeamNames(db)
-	if utils.CheckWebError(writer, request, err, "Could not retrieve list of Team names", "handleHomePage") {
+	if utils.CheckWebError(writer, request, err, "Could not retrieve list of Team names") {
 		return
 	}
 
@@ -329,7 +355,7 @@ func handleHomePage(writer http.ResponseWriter, request *http.Request) {
 		singleCallback          bool = false
 	)
 	for lastTwoCallbacksRows.Next() {
-		if utils.CheckWebError(writer, request, lastTwoCallbacksRows.Err(), "Could not prepare next db row for scanning GetLastTwoCallbacks rows", "handleHomePage") {
+		if utils.CheckWebError(writer, request, lastTwoCallbacksRows.Err(), "Could not prepare next db row for scanning GetLastTwoCallbacks rows") {
 			return
 		}
 
@@ -344,7 +370,7 @@ func handleHomePage(writer http.ResponseWriter, request *http.Request) {
 		)
 
 		err = lastTwoCallbacksRows.Scan(&dbTeamNameCurrent, &dbTargetIpAddressCurrent, &dbTargetValueCurrent, &dbAgentCallbackUnixCurrent, &dbCallbackOrderCurrent)
-		if utils.CheckWebError(writer, request, err, "Could not scan GetLastTwoCallbacks rows", "handleHomePage") {
+		if utils.CheckWebError(writer, request, err, "Could not scan GetLastTwoCallbacks rows") {
 			return
 		}
 
@@ -466,6 +492,8 @@ func main() {
 	// https://pkg.go.dev/net/http#FileServer
 	// Allow the hosting of static files like our images and stylesheets
 	staticFileServer := http.FileServer(http.Dir(utils.CurrentDirectory + "/site/root/static"))
+	// TODO: Figure out why the FileServer isn't setting the correct Content-Type header MIME type on JavaScript files.
+	//		 Should be "text/javascript" but is "text/plain"
 	http.Handle("/static/", http.StripPrefix("/static/", staticFileServer))
 
 	// Register page handlers

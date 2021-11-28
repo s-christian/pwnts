@@ -23,8 +23,11 @@ const (
 	maxTeamNameLength int           = 64
 )
 
-// Handle any errors encountered when trying to serve a web page
-func CheckWebError(writer http.ResponseWriter, request *http.Request, err error, errorMessage string, functionName string) bool {
+/*
+	Handle any errors encountered when trying to serve a web page by rendering
+	the error to the user.
+*/
+func CheckWebError(writer http.ResponseWriter, request *http.Request, err error, errorMessage string) bool {
 	if CheckError(Error, err, errorMessage) {
 		http.Error(
 			writer,
@@ -57,7 +60,77 @@ func CalculateCallbackPoints(timeDifference time.Duration, targetValue int) int 
 	return int(math.Round(float64(targetValue) * math.Pow(baseValue, (decayValue*(float64(timeDifference/time.Minute)-1)))))
 }
 
-func CheckPasswordHash(password string, hash string) bool {
+func GetTeamNames(db *sql.DB) ([]string, error) {
+	var teamNames []string
+	var err error
+
+	getTeamNamesSQL := `
+		SELECT name
+		FROM Teams
+	`
+	getTeamNamesStatement, err := db.Prepare(getTeamNamesSQL)
+	if err != nil {
+		return teamNames, err
+	}
+
+	teamNamesRows, err := getTeamNamesStatement.Query()
+	if err != nil {
+		return teamNames, err
+	}
+	Close(getTeamNamesStatement)
+
+	for teamNamesRows.Next() {
+		err = teamNamesRows.Err()
+		if err != nil {
+			return teamNames, err
+		}
+
+		var dbTeamName string
+		err = teamNamesRows.Scan(&dbTeamName)
+		if err != nil {
+			return teamNames, err
+		}
+
+		teamNames = append(teamNames, dbTeamName)
+	}
+	Close(teamNamesRows)
+
+	return teamNames, err
+}
+
+/*
+	Returns the teamId, name, password_hash, and created_date_unix for the
+	specified username, as well as an err if needed.
+
+	If user does not exist, err = sql.ErrNoRows
+	If backend server error, err = some error
+	Else, err = nil
+*/
+func GetUserInfo(db *sql.DB, username string) (teamId int, name string, passwordHash string, createdDateUnix int, err error) {
+	getUserInfoSQL := `
+		SELECT *
+		FROM Teams
+		WHERE name = ?
+	`
+	getUserInfoStatement, err := db.Prepare(getUserInfoSQL)
+	if CheckError(Error, err, "Could not prepare GetUserInfo statement") {
+		return
+	}
+
+	userInfoRow := getUserInfoStatement.QueryRow(username)
+	Close(getUserInfoStatement)
+
+	err = userInfoRow.Scan(&teamId, &name, &passwordHash, &createdDateUnix)
+	if err == sql.ErrNoRows {
+		Log(Warning, "Attempted login for non-existent user '"+username+"'")
+	} else if err != nil {
+		LogError(Error, err, "Could not query using GetUserInfo statement")
+	}
+
+	return
+}
+
+func ValidatePasswordHash(password string, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil // err == nil means incorrect password
 }
@@ -136,13 +209,13 @@ func RegisterTeam(db *sql.DB, teamName string, teamPasswordHash string) error {
 
 	A bool is returned as well as an error (potentially nil) to distinguish between failed authentication and backend error.
 */
-func ValidateLogin(db *sql.DB, username string, password string) (bool, error) {
-	passwordHash, err := GetUserPasswordHash(db, username)
-	if err != nil {
-		return false, err
-	}
-	return CheckPasswordHash(password, passwordHash), nil
-}
+// func ValidateLogin(db *sql.DB, username string, password string) (bool, error) {
+// 	passwordHash, err := GetUserPasswordHash(db, username)
+// 	if err != nil {
+// 		return false, err
+// 	}
+// 	return CheckPasswordHash(password, passwordHash), nil
+// }
 
 func RegisterAgent(db *sql.DB, agentUUID string, teamID int) bool { //, serverPrivateKey string, agentPublicKey string, createdDate int, rootDate int) {
 	Log(Info, "Registering Agent", agentUUID)
