@@ -236,6 +236,9 @@ func RegisterAgent(db *sql.DB, agentUUID string, teamID int) bool { //, serverPr
 
 	// TODO: Randomly generate this crypto keypair
 	// Temporary random number generators to satisfy the unique constraint
+	// TODO: Actually use the crypto keypair. The field currently only exists
+	// for future use and is not yet used. Should be used for encrypting
+	// communications.
 	randSource := rand.NewSource(time.Now().UnixNano())
 	seededRand := rand.New(randSource)
 	serverPrivateKey := seededRand.Intn(1000)

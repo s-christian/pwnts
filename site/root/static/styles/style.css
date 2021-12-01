@@ -353,6 +353,10 @@ input[type="submit"]:hover {
 	color: white;
 }
 
+#teamName {
+	color: red;
+}
+
 
 /* Keyframes, animations */
 @keyframes float {

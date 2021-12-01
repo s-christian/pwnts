@@ -88,7 +88,15 @@ func returnTemplateHTML(writer http.ResponseWriter, request *http.Request, htmlF
 }
 
 func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
-	dashboardContent := map[string]interface{}{"testString": "Hello, Dashboard!"}
+	/* Get dashboard information for specific team */
+	/*
+		- Agent UUID
+		- Team ID
+	*/
+
+	/* Construct and serve dashboard page */
+
+	dashboardContent := map[string]interface{}{"teamName": "Sample Team Name"}
 	dashboardHTML := returnTemplateHTML(writer, request, "dashboard.html", "handleDashboardPage", dashboardContent)
 
 	layoutContent := map[string]template.HTML{"title": "Red Team Dashboard", "pageContent": dashboardHTML}
@@ -188,7 +196,7 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 		authCookie := http.Cookie{Name: "auth", Value: newToken, Secure: true, HttpOnly: true}
 		http.SetCookie(writer, &authCookie)
 
-		utils.Log(utils.Done, "\t\tUser '"+postedUsername+"' successfully logged in")
+		utils.Log(utils.Done, "User '"+postedUsername+"' successfully logged in")
 		returnSuccess("Greetings, hacker!")
 	}
 }
@@ -449,6 +457,8 @@ func main() {
 	flag.IntVar(&argPort, "port", 443, "Port to listen on")
 	flag.Parse()
 
+	utils.Log(utils.Debug, "----------Initializing----------")
+
 	db = utils.GetDatabaseHandle() // `=` instead of `:=` to set the global variable
 	utils.ValidateDatabase(db)
 	defer utils.Close(db)
@@ -488,6 +498,7 @@ func main() {
 	listenAddress := fmt.Sprintf("%s:%d", listenIP.String(), argPort)
 
 	utils.Log(utils.Done, "Running HTTPS server at", listenAddress)
+	utils.Log(utils.Debug, "----------Activity Logs---------")
 
 	// https://pkg.go.dev/net/http#FileServer
 	// Allow the hosting of static files like our images and stylesheets
