@@ -196,7 +196,7 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 		authCookie := http.Cookie{Name: "auth", Value: newToken, Secure: true, HttpOnly: true}
 		http.SetCookie(writer, &authCookie)
 
-		utils.Log(utils.Done, "User '"+postedUsername+"' successfully logged in")
+		utils.Log(utils.Done, utils.GetUserIP(request)+": User '"+postedUsername+"' successfully logged in")
 		returnSuccess("Greetings, hacker!")
 	}
 }
@@ -207,7 +207,6 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 		func(writer http.ResponseWriter, request *http.Request) {
 			authCookie, err := request.Cookie("auth")
 			if err != nil { // cookie not found
-				//fmt.Fprint(writer, "Not authorized")
 				http.Redirect(writer, request, "/login", http.StatusFound)
 				return
 			} else {
@@ -215,9 +214,7 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 					authCookie.Value,
 					func(token *jwt.Token) (interface{}, error) {
 						if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-							//fmt.Fprint(writer, "Not authorized")
-							http.Redirect(writer, request, "/login", http.StatusFound)
-							return nil, errors.New("error parsing jwt: incorrect signing method")
+							return nil, errors.New("incorrect signing method")
 						}
 
 						// Return the signing key for token validation
@@ -225,17 +222,18 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 					},
 				)
 
-				// Token is not a proper JWT, or does not use the correct signing method
-				if utils.CheckError(utils.Warning, err, "Could not parse JWT for authentication") {
-					//fmt.Fprint(writer, "Not authorized")
-					http.Redirect(writer, request, "/login", http.StatusFound)
+				// Token is not a proper JWT, is expired, or does not use the correct signing method
+				if err != nil {
+					utils.ClearAuthCookieAndRedirect(writer, request, err)
 					return
 				}
 
+				// I believe the above jwt.Parse() already does all of the token validation for us,
+				// but the below checks are "just in case".
+
 				// Check if the JWT is valid
 				if !token.Valid {
-					//fmt.Fprint(writer, "JWT token is invalid, cannot authenticate")
-					http.Redirect(writer, request, "/login", http.StatusFound)
+					utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token invalid"))
 					return
 				}
 
@@ -244,19 +242,14 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 
 				// Ensure the claims we need exist in the first place
 				if tokenClaims["user"] == nil || tokenClaims["teamId"] == nil {
-					//fmt.Fprint(writer, "Not authorized, invalid token")
-					http.Redirect(writer, request, "/login", http.StatusFound)
+					utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token claims don't exist"))
 					return
 				}
 
 				// Make sure the token isn't expired (current time > exp).
 				// Automatically uses the RFC standard "exp" claim, a timestamp in UNIX seconds.
 				if tokenClaims.Valid() != nil {
-					//fmt.Fprint(writer, "Token has expired, please log in again")
-					// Delete the expired auth cookie
-					newAuthCookie := http.Cookie{Name: "auth", Value: "", MaxAge: -1, Secure: true, HttpOnly: true}
-					http.SetCookie(writer, &newAuthCookie)
-					http.Redirect(writer, request, "/login", http.StatusFound)
+					utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token claims are invalid"))
 					return
 				}
 
@@ -267,13 +260,11 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 
 				// Validate the claims
 				if tokenUser == "" {
-					//fmt.Fprint(writer, "Not authorized, invalid user")
-					http.Redirect(writer, request, "/login", http.StatusFound)
+					utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token claim 'user' is invalid"))
 					return
 				}
 				if tokenTeamID < 1 {
-					//fmt.Fprint(writer, "Not authorized, invalid teamId")
-					http.Redirect(writer, request, "/login", http.StatusFound)
+					utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token claim 'teamId' is invalid"))
 					return
 				}
 
