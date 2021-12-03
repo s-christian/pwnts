@@ -10,11 +10,13 @@
 					<tbody>
 						{{ if .scoreboardData }}{{ range $teamName, $scoreInfo := .scoreboardData }}<tr>
 							<td class="tableTeam"><span>{{ $teamName }}</span></td>
-							<td class="tablePwnts">{{ index . 0 }}</td>
-							<td class="tablePwns">{{ index . 1 }}</td>
+							<td class="tablePwnts">{{ .Pwnts }}</td>
+							<td class="tablePwns">{{ .PwnedHosts }}</td>
 						</tr>
 						{{ end }}{{ else }}<tr>
-							<td>No teams!</td>
+							<td class="tableTeam"></td>
+							<td class="tablePwnts">No data!</td>
+							<td class="tablePwns"></td>
 						</tr>{{ end }}
 					</tbody>
 				</table>

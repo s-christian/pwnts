@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	//"html/template"
 	"math"
 	"math/rand"
 	"net/http"
@@ -15,12 +17,17 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/golang-jwt/jwt"
 	"github.com/google/uuid"
 )
 
 const (
-	maxCallbackTime   time.Duration = 15 * time.Minute
-	maxTeamNameLength int           = 64
+	MaxCallbackTime   time.Duration = 15 * time.Minute
+	MaxTeamNameLength int           = 64
+)
+
+var (
+	JWTSigningKey []byte = []byte("supersecretsecret")
 )
 
 /*
@@ -29,14 +36,8 @@ const (
 */
 func CheckWebError(writer http.ResponseWriter, request *http.Request, err error, errorMessage string) bool {
 	if CheckError(Error, err, errorMessage) {
-		http.Error(
-			writer,
-			fmt.Sprintf("Internal error: cannot serve '%s %s'\n%s",
-				request.Method,
-				request.URL.RequestURI(),
-				err.Error()),
-			http.StatusInternalServerError,
-		)
+		writer.WriteHeader(http.StatusInternalServerError)
+		//writer.Write([]byte(string(template.HTML(`<p style="color: red; font-weight: bold;">`)) + "'" + request.Method + " " + request.URL.RequestURI() + "'" + string(template.HTML(`</p>`))))
 		return true
 	}
 	return false
@@ -66,11 +67,40 @@ func ClearAuthCookieAndRedirect(writer http.ResponseWriter, request *http.Reques
 	http.Redirect(writer, request, "/login", http.StatusFound)
 }
 
+func GenerateJWT(db *sql.DB, username string, teamID int) (tokenStirng string, err error) {
+	/*
+		--- Token Payload (Claims) ---
+		"user": <team_name>,
+		"teamId": <team_id>,
+		"teamName": <team_name>,
+		"exp": <timestamp_unix_seconds>
+
+		JWT is stored as a cookie with the name "auth"
+	*/
+
+	token := jwt.New(jwt.SigningMethodHS256)
+
+	claims := token.Claims.(jwt.MapClaims)
+	teamName, err := GetTeamName(db, teamID)
+	if err != nil {
+		return
+	}
+
+	claims["user"] = username
+	claims["teamId"] = teamID
+	claims["teamName"] = teamName
+	claims["exp"] = time.Now().Add(time.Minute * 30).Unix() // token expires after 30 minutes
+
+	tokenString, err := token.SignedString(JWTSigningKey)
+
+	return tokenString, err
+}
+
 func CalculateCallbackPoints(timeDifference time.Duration, targetValue int) int {
 	// Only care about minutes, in cases where a callback might be 5 milliseconds off or something negligible we don't care about.
 	// We don't want to round on minimum time, but rounding on maximum time is fine.
 	// 14.50 => 15, 15.49 => 15
-	if timeDifference.Round(time.Minute) > maxCallbackTime {
+	if timeDifference.Round(time.Minute) > MaxCallbackTime {
 		return 1 // only 1 point
 	}
 
@@ -82,6 +112,23 @@ func CalculateCallbackPoints(timeDifference time.Duration, targetValue int) int 
 	const baseValue float64 = 1.2
 	const decayValue float64 = -0.9
 	return int(math.Round(float64(targetValue) * math.Pow(baseValue, (decayValue*(float64(timeDifference/time.Minute)-1)))))
+}
+
+func GetTeamName(db *sql.DB, teamID int) (teamName string, err error) {
+	getTeamNameSQL := `
+		SELECT name
+		FROM Teams
+		WHERE team_id = ?
+	`
+	getTeamNameStatement, err := db.Prepare(getTeamNameSQL)
+	if err != nil {
+		return
+	}
+
+	err = getTeamNameStatement.QueryRow(teamID).Scan(&teamName)
+	Close(getTeamNameStatement)
+
+	return
 }
 
 func GetTeamNames(db *sql.DB) ([]string, error) {
@@ -179,8 +226,8 @@ func RegisterTeam(db *sql.DB, teamName string, teamPasswordHash string) error {
 	var err error
 
 	// Check that team name <= maxTeamNameLength
-	if len(teamName) > maxTeamNameLength {
-		return errors.New("error registering team: team name can't be longer than " + fmt.Sprint(maxTeamNameLength) + " characters")
+	if len(teamName) > MaxTeamNameLength {
+		return errors.New("error registering team: team name can't be longer than " + fmt.Sprint(MaxTeamNameLength) + " characters")
 	}
 
 	// Check that new team name doesn't match pre-existing team name, stripping special characters for the comparison

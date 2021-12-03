@@ -27,6 +27,7 @@ html {
 	font-size: 16px;
 	cursor: url(/static/images/cursor.png), default;
 	box-sizing: border-box;
+	height: 100%;
 }
 
 *, *:before, *:after {
@@ -157,7 +158,7 @@ nav ul a {
 	transition: 0.3s;
 }
 nav ul a:hover {
-	background-color: var(--color-cloud);
+	background-color: #77777780;
 	color: red;
 	border: 0 2px 0 2px solid black;
 	font-size: 1.16em;
@@ -353,8 +354,56 @@ input[type="submit"]:hover {
 	color: white;
 }
 
+.mainHeading {
+	font-size: 2rem;
+	font-family: var(--fonts-hacked)
+}
 #teamName {
 	color: red;
+}
+#sliderLabel {
+	font-size: 1.25rem;
+}
+#callbackSlider {
+	-webkit-appearance: none;
+	appearance: none;
+	margin-top: 1rem;
+	background: linear-gradient(to right, red 0%, white 50%);
+	border: 1px solid black;
+	height: 20px;
+	padding: 0;
+	opacity: 0.7;
+	-webkit-transition: 0.2s;
+	transition: opacity 0.2s;
+	cursor: url(/static/images/cursor.png), default;
+}
+#callbackSlider:hover {
+	opacity: 0.9;
+}
+#callbackSlider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	border-radius: 0;
+	width: 20px;
+	height: 20px;
+	background: black;
+	cursor: url(/static/images/pointer.png), default !important;
+}
+#callbackSlider::-moz-range-thumb {
+	border-radius: 0;
+	width: 20px;
+	height: 20px;
+	background: black;
+	cursor: url(/static/images/pointer.png), default !important;
+}
+#sliderOutput {
+	font-size: 1.5rem;
+	font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+	text-align: center;
+}
+#callbackWeight {
+	font-weight: bold;
+	color: var(--color-redteam-red);
 }
 
 

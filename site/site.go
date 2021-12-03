@@ -27,24 +27,20 @@ import (
 	"html/template"
 	"net"
 	"net/http"
-	"time"
 
+	"github.com/s-christian/pwnts/site/api"
 	"github.com/s-christian/pwnts/utils"
 
 	"github.com/golang-jwt/jwt"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const (
-	maxCallbackTime time.Duration = time.Minute * 15
-)
-
 // In production don't commit or make public your jwtSigningKey
 // Here's a safer way by setting the MY_JWT_TOKEN environment variable:
 // var jwtSigningKey = os.Get("MY_JWT_TOKEN")
+// TODO: Read from a `.env` file or similar
 var (
-	db            *sql.DB
-	jwtSigningKey []byte = []byte("verysecret")
+	db *sql.DB
 )
 
 // func createCert() {
@@ -67,20 +63,20 @@ func serveLayoutTemplate(writer http.ResponseWriter, request *http.Request, func
 func returnTemplateHTML(writer http.ResponseWriter, request *http.Request, htmlFilename string, functionName string, pageContent map[string]interface{}) template.HTML {
 	contentTemplateFilepath := utils.CurrentDirectory + "/site/templates/" + htmlFilename
 	contentTemplate, err := template.ParseFiles(contentTemplateFilepath)
-	if utils.CheckWebError(writer, request, err, functionName+": Can't parse template") {
-		return ""
+	if utils.CheckWebError(writer, request, err, functionName+": Can't parse template '"+htmlFilename+"'") {
+		return template.HTML(`<p style="color: red; font-weight: bold;">Error constructing page content</p>`)
 	}
 
 	// Construct templated HTML, store as a string
 	var contentHTML bytes.Buffer
 	err = contentTemplate.Execute(&contentHTML, pageContent)
-	if utils.CheckWebError(writer, request, err, functionName+": Couldn't execute template") {
+	if utils.CheckWebError(writer, request, err, functionName+": Couldn't execute template '"+htmlFilename+"'") {
 		return template.HTML(`<p style="color: red; font-weight: bold;">Error fetching page content</p>`)
 	}
 
 	if contentHTML.String() == "" {
 		utils.Log(utils.Error, functionName+": Template returned no data")
-		return template.HTML(`<p style="color: red; font-weight: bold;">Error fetching page content</p>`)
+		return template.HTML(`<p style="color: red; font-weight: bold;">Error serving page content</p>`)
 	}
 
 	// Return templated HTML
@@ -90,17 +86,26 @@ func returnTemplateHTML(writer http.ResponseWriter, request *http.Request, htmlF
 func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 	/* Get dashboard information for specific team */
 	/*
+		Required parameters for agent construction in `pwnts/agent/agent.go`:
 		- Agent UUID
 		- Team ID
+		- Callback rate in minutes
 	*/
 
-	/* Construct and serve dashboard page */
+	switch request.Method {
+	// *** GET: Display team dashboard with agent generation
+	case http.MethodGet:
+		dashboardContent := map[string]interface{}{"teamName": "Sample Team Name"}
+		dashboardHTML := returnTemplateHTML(writer, request, "dashboard.html", "handleDashboardPage", dashboardContent)
 
-	dashboardContent := map[string]interface{}{"teamName": "Sample Team Name"}
-	dashboardHTML := returnTemplateHTML(writer, request, "dashboard.html", "handleDashboardPage", dashboardContent)
+		layoutContent := map[string]template.HTML{"title": "Red Team Dashboard", "pageContent": dashboardHTML}
+		serveLayoutTemplate(writer, request, "handleDashboardPage", layoutContent)
 
-	layoutContent := map[string]template.HTML{"title": "Red Team Dashboard", "pageContent": dashboardHTML}
-	serveLayoutTemplate(writer, request, "handleDashboardPage", layoutContent)
+	// ***POST: Generate agent and provide downloadable agent executable
+	case http.MethodPost:
+		writer.Write([]byte("This is a POST! Hello! :)"))
+	}
+
 }
 
 func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
@@ -183,7 +188,7 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 		// Else, it is a valid login, so continue
 
 		// Set "auth" cookie to a signed JWT
-		newToken, err := generateJWT(postedUsername, teamId)
+		newToken, err := utils.GenerateJWT(postedUsername, teamId)
 		if utils.CheckError(utils.Error, err, "Could not generate JWT for valid user") {
 			returnServerError("Could not generate a JWT. Please contact an administrator.")
 			return
@@ -218,7 +223,7 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 						}
 
 						// Return the signing key for token validation
-						return jwtSigningKey, nil
+						return utils.JWTSigningKey, nil
 					},
 				)
 
@@ -275,154 +280,47 @@ func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handle
 	)
 }
 
-func generateJWT(username string, teamID int) (string, error) {
-	/*
-		--- Token Payload (Claims) ---
-		"user": <team_name>,
-		"teamId": <team_id>,
-		"exp": <timestamp_unix_seconds>
-
-		JWT is stored as a cookie with the name "auth"
-	*/
-
-	token := jwt.New(jwt.SigningMethodHS256)
-
-	claims := token.Claims.(jwt.MapClaims)
-
-	claims["user"] = username
-	claims["teamId"] = teamID
-	claims["exp"] = time.Now().Add(time.Minute * 30).Unix() // token expires after 30 minutes
-
-	tokenString, err := token.SignedString(jwtSigningKey)
-
-	return tokenString, err
-}
-
 func handleHomePage(writer http.ResponseWriter, request *http.Request) {
 	/*
-		--- Retrieve the last two Agent checkins grouped by team and target IP address ---
+		Client-side JavaScript will continually update the scoreboard via AJAX,
+		but the first page load populates the scoreboard for the user.
+		This was mainly me just learning Go JSON marshaling, not too practical.
 	*/
-	getLastTwoCallbacksSQL := `
-		SELECT Teams.name, Callbacks.target_ipv4_address, Callbacks.value, Callbacks.time_unix, Callbacks.callback_order
-		FROM (
-			SELECT Agents.team_id, Callbacks.target_ipv4_address, Callbacks.value, Callbacks.time_unix, Callbacks.agent_uuid, row_number() OVER (PARTITION BY Agents.team_id, Callbacks.target_ipv4_address ORDER BY Callbacks.time_unix DESC) AS callback_order
-			FROM (
-				SELECT AgentCheckins.target_ipv4_address, TargetsInScope.value, AgentCheckins.time_unix, AgentCheckins.agent_uuid
-				FROM AgentCheckins
-				JOIN TargetsInScope
-				ON AgentCheckins.target_ipv4_address = TargetsInScope.target_ipv4_address
-			) AS Callbacks
-			JOIN Agents
-			ON Callbacks.agent_uuid = Agents.agent_uuid
-		) AS Callbacks
-		JOIN Teams
-		ON Callbacks.team_id = Teams.team_id
-		WHERE callback_order <= 2
-	`
-	getLastTwoCallbacksStatement, err := db.Prepare(getLastTwoCallbacksSQL)
-	if utils.CheckWebError(writer, request, err, "Could not create GetLastTwoCallbacks statement") {
-		return
-	}
+	var teamsPointsAndHosts map[string]api.TeamScores
+	var homeContent map[string]interface{}
 
-	lastTwoCallbacksRows, err := getLastTwoCallbacksStatement.Query()
-	if utils.CheckWebError(writer, request, err, "Could not execute GetLastTwoCallbacks statement") {
-		return
-	}
-	utils.Close(getLastTwoCallbacksStatement)
+	scoreboardData, err := api.GetScoreboardData(db)
 
-	/*
-		--- Retrieve all team names and initialize the map ---
-	*/
-	teamNames, err := utils.GetTeamNames(db)
-	if utils.CheckWebError(writer, request, err, "Could not retrieve list of Team names") {
-		return
-	}
-
-	teamsPointsAndHosts := map[string][]int{}
-	for _, teamName := range teamNames {
-		teamsPointsAndHosts[teamName] = []int{0, 0}
-	}
-
-	// Scoring note:
-	// Multiple Agents from the same team on the same host is fine.
-	// We only use the last checkins, grouped by team and IP.
-	var (
-		dbTeamNameLast          string
-		dbTargetValueLast       int
-		dbAgentCallbackUnixLast int
-		agentDead               bool = false
-		singleCallback          bool = false
-	)
-	for lastTwoCallbacksRows.Next() {
-		if utils.CheckWebError(writer, request, lastTwoCallbacksRows.Err(), "Could not prepare next db row for scanning GetLastTwoCallbacks rows") {
-			return
-		}
-
-		// team_id, target_ip_address, value, time_unix, callback_order (1 or 2, 1 being first)
-		// Compare second callback to the most recent one
-		var (
-			dbTeamNameCurrent          string
-			dbTargetIpAddressCurrent   string
-			dbTargetValueCurrent       int
-			dbAgentCallbackUnixCurrent int
-			dbCallbackOrderCurrent     int
-		)
-
-		err = lastTwoCallbacksRows.Scan(&dbTeamNameCurrent, &dbTargetIpAddressCurrent, &dbTargetValueCurrent, &dbAgentCallbackUnixCurrent, &dbCallbackOrderCurrent)
-		if utils.CheckWebError(writer, request, err, "Could not scan GetLastTwoCallbacks rows") {
-			return
-		}
-
-		//fmt.Printf("%d | %s | %d | %d | %d\n", dbTeamIDCurrent, dbTargetIpAddressCurrent, dbTargetValueCurrent, dbAgentCallbackUnixCurrent, dbCallbackOrderCurrent)
-
-		if dbCallbackOrderCurrent == 1 {
-			var checkinTimeAgo time.Duration = time.Duration(time.Now().Unix()-int64(dbAgentCallbackUnixCurrent)) * time.Second
-			if checkinTimeAgo.Round(time.Second) > maxCallbackTime {
-				agentDead = true
-				continue // last callback was too long ago, assume Agent is dead
-			}
-			agentDead = false
-
-			if singleCallback { // last row only had a single callback (the "pair" ended with callbackOrder == 1), add its points
-				teamsPointsAndHosts[dbTeamNameLast][0] += dbTargetValueLast // a single (Agent's first) callback will initially receive the full target value
-				teamsPointsAndHosts[dbTeamNameLast][1]++                    // increment num of pwned hosts
-				continue
-			}
-
-			dbTeamNameLast = dbTeamNameCurrent
-			dbTargetValueLast = dbTargetValueCurrent
-			dbAgentCallbackUnixLast = dbAgentCallbackUnixCurrent
-			singleCallback = true // set for next iteration
-		} else if dbCallbackOrderCurrent == 2 {
-			singleCallback = false
-			if agentDead { // skip callback pair for dead Agents
-				continue
-			}
-
-			checkinTimeDifference := time.Second * time.Duration(dbAgentCallbackUnixLast-dbAgentCallbackUnixCurrent)
-			teamsPointsAndHosts[dbTeamNameCurrent][0] += utils.CalculateCallbackPoints(checkinTimeDifference, dbTargetValueCurrent)
-			teamsPointsAndHosts[dbTeamNameCurrent][1]++ // increment num of pwned hosts
-		} else {
-			fmt.Println("I have no idea what happened:", dbCallbackOrderCurrent)
+	if err == nil {
+		err = json.Unmarshal(scoreboardData, &teamsPointsAndHosts) // convert data back into Go map
+		if !utils.CheckError(utils.Error, err, "Could not unmarshal scoreboard data from JSON") {
+			// The parameters to fill the page-specific template
+			homeContent = map[string]interface{}{"scoreboardData": teamsPointsAndHosts}
 		}
 	}
-	utils.Close(lastTwoCallbacksRows)
 
-	if singleCallback { // account for the very last row being a single callback
-		teamsPointsAndHosts[dbTeamNameLast][0] += dbTargetValueLast // a single (Agent's first) callback will initially receive the full target value
-		teamsPointsAndHosts[dbTeamNameLast][1]++                    // increment num of pwned hosts
-	}
-
-	// The parameters to fill the page-specific template
-	homeContent := map[string]interface{}{"scoreboardData": teamsPointsAndHosts}
 	// The templated HTML of type template.HTML for proper rendering on the DOM
 	homeHTML := returnTemplateHTML(writer, request, "index.html", "handleHomePage", homeContent)
 
-	// Must use template.HTML for proper DOM rendering, otherwise it will look like plain text
+	// Must use template.HTML for proper DOM rendering, otherwise it will be plain text
 	layoutContent := map[string]template.HTML{"title": "Scoreboard", "pageContent": homeHTML}
 	// Fill the layout with our page-specific templated HTML
 	// The layout template automatically includes the header info, navbar, and general layout
 	serveLayoutTemplate(writer, request, "handleHomePage", layoutContent)
+}
+
+func apiScoreboard(writer http.ResponseWriter, request *http.Request) {
+	switch request.Method {
+	case http.MethodPost:
+		jsonEncoder := json.NewEncoder(writer)
+		writer.Header().Add("Content-Type", "application/json")
+		scoreboardData, _ := api.GetScoreboardData(db)
+		jsonEncoder.Encode(scoreboardData)
+
+	default:
+		writer.WriteHeader(http.StatusMethodNotAllowed)
+		writer.Write([]byte("Method not allowed."))
+	}
 }
 
 /* --- Page handler outline ---
@@ -430,18 +328,18 @@ func handleHomePage(writer http.ResponseWriter, request *http.Request) {
 2. Create parameters mapping for page-specific template.
 3. Fill the page-specific template.
 4. Create parameters mapping for layout template, including your page-specific templated HTML.
-5. Serve to the user the full templated layout page.
+5. Serve the full templated layout page.
 */
 
 func handleRequests() {
 	// TODO: Add request logging
 	http.HandleFunc("/", handleHomePage)
+	http.HandleFunc("/api/scoreboard", apiScoreboard)
 	http.HandleFunc("/login", handleLoginPage)
 	http.Handle("/dashboard", isAuthorized(handleDashboardPage))
 }
 
 func main() {
-	//utils.Log(utils.Warning, "--- If you have not already done so, please run the server before running this ---")
 	var argTest bool
 	var argPort int
 	flag.BoolVar(&argTest, "test", false, "Listen on localhost instead of the default interface's IP address")
@@ -493,7 +391,7 @@ func main() {
 
 	// https://pkg.go.dev/net/http#FileServer
 	// Allow the hosting of static files like our images and stylesheets
-	staticFileServer := http.FileServer(http.Dir(utils.CurrentDirectory + "/site/root/static"))
+	staticFileServer := http.FileServer(http.Dir(utils.CurrentDirectory + "/site/static"))
 	// TODO: Figure out why the FileServer isn't setting the correct Content-Type header MIME type on JavaScript files.
 	//		 Should be "text/javascript" but is "text/plain"
 	http.Handle("/static/", http.StripPrefix("/static/", staticFileServer))

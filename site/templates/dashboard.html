@@ -1,6 +1,11 @@
 				<script src="/static/js/dashboard.js" type="text/javascript"></script>
-				<h3>Team <span id="teamName">{{ .teamName }}</span> Agent Generator</h3>
+				<h3 class="mainHeading">Team <span id="teamName">{{ .teamName }}</span> Agent Generator</h3>
 				<form id="agent-form" method="post" autocomplete="off">
 					<div id="agent-form-status" class="hidden"></div>
+					<div class="formGroup">
+						<label id="sliderLabel" for="callbackSlider">Agent callback rate:</label>
+						<input type="range" id="callbackSlider" name="callbackSlider" min="1" max="15" value="1" step="1">
+						<p id="sliderOutput"><span id="minutes">1</span> <span id="minutesText">minute</span> = <span id="callbackWeight">1</span>x pwnts value per host</p>
+					</div>
 					<input type="submit" value="GENERATE">
 				</form>
