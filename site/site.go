@@ -188,7 +188,7 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 		// Else, it is a valid login, so continue
 
 		// Set "auth" cookie to a signed JWT
-		newToken, err := utils.GenerateJWT(postedUsername, teamId)
+		newToken, err := utils.GenerateJWT(db, postedUsername, teamId)
 		if utils.CheckError(utils.Error, err, "Could not generate JWT for valid user") {
 			returnServerError("Could not generate a JWT. Please contact an administrator.")
 			return
