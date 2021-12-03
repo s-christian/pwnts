@@ -1,5 +1,11 @@
-function parseJwt() {
+function parseJwt(token) {
+	let base64Url = token.split(".")[1]
+	let base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/")
+	let jsonPayload = decodeURIComponent(atob(base64).split("").map((c) => {
+		return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)
+	}).join(""))
 
+	return JSON.parse(jsonPayload)
 }
 
 function calculateWeight(minutes) {
@@ -13,7 +19,12 @@ function calculateWeight(minutes) {
 	return Math.round(baseValue**(decayValue*(minutes-1)) * 100) / 100
 }
 
+let userJwt = parseJwt(getCookie("auth"))
+
 document.addEventListener("DOMContentLoaded", () => {
+	let teamName = document.getElementById("teamName")
+	teamName.innerHTML = userJwt.teamName
+
 	let slider = document.getElementById("callbackSlider")
 	let minutes = document.getElementById("minutes")
 	let minutesText = document.getElementById("minutesText")

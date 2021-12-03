@@ -198,7 +198,7 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 		//defer http.Redirect(writer, request, "/dashboard", http.StatusFound)
 		// HTTP POST won't redirect. This has been done in client-side JavaScript instead.
 
-		authCookie := http.Cookie{Name: "auth", Value: newToken, Secure: true, HttpOnly: true}
+		authCookie := http.Cookie{Name: "auth", Value: newToken, Secure: true} //, HttpOnly: true}
 		http.SetCookie(writer, &authCookie)
 
 		utils.Log(utils.Done, utils.GetUserIP(request)+": User '"+postedUsername+"' successfully logged in")
