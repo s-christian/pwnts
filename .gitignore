@@ -5,3 +5,11 @@
 
 # Certificates
 *.pem
+
+# Testing binaries
+build
+*.exe
+*.zip
+
+# Secret environment variables
+.env
