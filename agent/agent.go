@@ -31,12 +31,12 @@ import (
 
 type agentInfoStruct struct {
 	ServerPublicKey string
-	AgentUUID       uuid.UUID
+	AgentUUID       string
 }
 
 var (
 	serverPublicKey string          = "555"
-	AgentUUID       uuid.UUID       = uuid.New()
+	AgentUUID       string          = uuid.New().String()
 	agentInfo       agentInfoStruct = agentInfoStruct{ServerPublicKey: serverPublicKey, AgentUUID: AgentUUID}
 	// testing: AgentUUID, _                 = uuid.Parse("ef1a6a78-0d95-490a-a07f-9607e00b96ce")
 
@@ -49,8 +49,8 @@ var (
 	serverAddress net.TCPAddr = net.TCPAddr{IP: net.ParseIP(ServerIP), Port: ServerPort}
 
 	tlsConfig                tls.Config    = tls.Config{InsecureSkipVerify: true}
-	CallbackFrequencyMinutes time.Duration = 1
-	callbackFrequencyTime                  = CallbackFrequencyMinutes * time.Minute
+	CallbackFrequencyMinutes int           = 1
+	callbackFrequencyTime    time.Duration = time.Duration(CallbackFrequencyMinutes) * time.Minute
 )
 
 func callback() {
@@ -69,7 +69,7 @@ func callback() {
 		return
 	}
 
-	callbackMessage := AgentUUID.String()
+	callbackMessage := AgentUUID
 	numBytes, err := conn.Write([]byte(callbackMessage))
 	if err != nil { // couldn't establish connection?
 		return
@@ -97,7 +97,7 @@ func testServer() {
 		utils.LogError(utils.Warning, err, "Setting write deadline failed, this is weird")
 	}
 
-	testMessage := fmt.Sprintf("%s %s", AgentUUID.String(), "TEST")
+	testMessage := fmt.Sprintf("%s %s", AgentUUID, "TEST")
 	numBytes, err := conn.Write([]byte(testMessage))
 	if err != nil {
 		utils.LogError(utils.Error, err, "Could not send data to server (write timeout)")
@@ -120,7 +120,7 @@ func testServer() {
 }
 
 func (info agentInfoStruct) printAgentInfo() {
-	data := []string{info.ServerPublicKey, info.AgentUUID.String()}
+	data := []string{info.ServerPublicKey, info.AgentUUID}
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Server Public Key", "Agent UUID"})
