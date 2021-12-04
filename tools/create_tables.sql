@@ -30,4 +30,4 @@ CREATE TABLE "Teams" (
 	"password_hash"	TEXT NOT NULL,
 	"created_date_unix"	INTEGER NOT NULL,
 	PRIMARY KEY("team_id" AUTOINCREMENT)
-);
+)
