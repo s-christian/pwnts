@@ -51,7 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 		// Using XMLHttpRequest() over Fetch() for older browser compatibility
 		const agentRequest = new XMLHttpRequest()
-		agentRequest.responseType("blob") // raw file contents, important
+		agentRequest.responseType = "blob" // raw file contents, important
 
 		// Bind the FormData object and the form element
 		const formData = new FormData(agentForm)
