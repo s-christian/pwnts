@@ -151,8 +151,10 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 		agentSource := utils.CurrentDirectory + "/agent/agent.go"
 
 		newAgentFilename := "agent_" + postedOS + "_" + postedArch + "_" + agentUUID.String()
+		newAgentFilenameTruncated := strings.Join(strings.Split(newAgentFilename, "_")[0:3], "_")
 		if postedOS == "windows" {
 			newAgentFilename = newAgentFilename + ".exe"
+			newAgentFilenameTruncated = newAgentFilenameTruncated + ".exe"
 		}
 
 		buildDirectory := utils.CurrentDirectory + "/agent/compiled_agents/"
@@ -164,6 +166,7 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 			buildDirectory+newAgentFilename,
 			agentSource,
 		)
+		utils.Log(utils.Debug, commandString)
 
 		// TODO: This currently only works on Linux. In the future, determine
 		// the host OS and either run "cmd" or "sh" accordingly.
@@ -176,7 +179,7 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 
 		// Prompt the user's browser to download the file, stripping the UUID
 		// from the filename.
-		utils.PromptFileDownload(writer, request, buildDirectory+newAgentFilename, strings.Join(strings.Split(newAgentFilename, "_")[0:3], "_"))
+		utils.PromptFileDownload(writer, request, buildDirectory+newAgentFilename, newAgentFilenameTruncated)
 
 		utils.ReturnStatusSuccess(writer, request, "Compiled agent successfully!")
 	}
