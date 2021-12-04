@@ -242,7 +242,7 @@ func apiScoreboard(writer http.ResponseWriter, request *http.Request) {
 		jsonEncoder := json.NewEncoder(writer)
 		writer.Header().Add("Content-Type", "application/json")
 		scoreboardData, _ := api.GetScoreboardData(db)
-		jsonEncoder.Encode(scoreboardData)
+		jsonEncoder.Encode(string(scoreboardData))
 
 	default:
 		writer.WriteHeader(http.StatusMethodNotAllowed)
