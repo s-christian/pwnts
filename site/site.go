@@ -179,10 +179,10 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 			serverIP,
 			serverPort,
 			callbackFrequencyMinutes,
-			buildDirectory+newAgentFilename,
-			agentSource,
 			postedOS,
 			postedArch,
+			buildDirectory+newAgentFilename,
+			agentSource,
 		)
 
 		// TODO: This currently only works on Linux. In the future, determine
