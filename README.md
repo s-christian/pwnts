@@ -23,6 +23,22 @@ A Red Team tool for scoring during exercises and competitions.
 
 Compiled Go binaries have ***zero dependencies***, and the web application likewise relies on no external resources. Everything is designed to be baked-in and ready to go.
 
+## Running
+
+There are currently no pre-compiled binaries, though I will provide them shortly.
+
+Follow these steps to get everything set up and running:
+
+1. Initialize the database: `go run tools/databaseTools.go --init-db`
+2. Add your targets (IPs) with point values to `./tools/targets.txt`. Follow the format of the examples already in the file.
+3. Register targets: `go run tools/databaseTools.go --register-targets /tools/targets.txt`
+4. Create teams: `go run tools/databaseTools.go --register-team --team-name <name> --team-password <password>`
+5. Start the site: `go run site/site.go`
+6. Start the callback server: `go run server/server.go`
+7. Log in to the site, generate an agent, then execute it on your pwned host.
+
+---
+
 ## Premise
 
 Pwnts accounts are created and disseminated to each Red Team before the competition begins. Through the web application, authenticated Red Teamers are able to generate Golang binary Agents to run on their pwnd targets by providing values for a handful of parameters.
