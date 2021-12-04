@@ -1,17 +1,15 @@
-function updateScoreboard() {
+async function updateScoreboard() {
 	const scoreboardRequest = new XMLHttpRequest()
 
 	// Define what happens on successful data submission
 	scoreboardRequest.addEventListener("load", (event) => {
-		let scoreboardResponse
 		try {
-			scoreboardResponse = JSON.parse(event.target.responseText)
+			// Must parse twice. I guess it's too stringy.
+			let scoreboardData = JSON.parse(JSON.parse(event.target.responseText))
+			populateScoreboard(scoreboardData)
 		} catch(e) {
 			console.error("Failed to parse retrieved scoreboard data as JSON")
-			return
 		}
-
-		console.log(scoreboardResponse)
 	})
 	
 	// Define what happens in case of error
@@ -24,6 +22,12 @@ function updateScoreboard() {
 
 	// Send the request
 	scoreboardRequest.send()
+}
+
+async function populateScoreboard(data) {
+	for (let team in data) {
+		//console.log(data[team])
+	}
 }
 
 // *** Refresh the scoreboard every five seconds via AJAX
