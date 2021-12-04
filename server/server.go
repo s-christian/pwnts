@@ -339,7 +339,7 @@ func main() {
 	if argTest {
 		listenIP = net.ParseIP("127.0.0.1")
 	} else {
-		listenIP = utils.GetOutboundIP()
+		listenIP = utils.GetHostIP()
 	}
 
 	listenAddress := fmt.Sprintf("%s:%d", listenIP.String(), argPort)
