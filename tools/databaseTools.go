@@ -125,9 +125,9 @@ func initializeDatabase() {
 
 	createTablesCommands := strings.Split(string(createTablesFileContents), ";")
 
-	for _, command := range createTablesCommands {
+	for i, command := range createTablesCommands {
 		statement, err := db.Prepare(command)
-		utils.CheckErrorExit(utils.Error, err, utils.ERR_STATEMENT, "Could not create CreateTableCommand statement")
+		utils.LogError(utils.Error, err, "Could not create statement for table #"+fmt.Sprint(i))
 		defer utils.Close(statement)
 
 		_, err = statement.Exec()
