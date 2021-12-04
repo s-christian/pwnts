@@ -22,9 +22,12 @@ function calculateWeight(minutes) {
 let userJwt = parseJwt(getCookie("auth"))
 
 document.addEventListener("DOMContentLoaded", () => {
+	/* --- Dynamic form content --- */
+	// Insert team name
 	let teamName = document.getElementById("teamName")
 	teamName.innerHTML = userJwt.teamName
 
+	// Display pwnts weight values for selected callback time
 	let slider = document.getElementById("callbackSlider")
 	let minutes = document.getElementById("minutes")
 	let minutesText = document.getElementById("minutesText")
@@ -34,5 +37,61 @@ document.addEventListener("DOMContentLoaded", () => {
 		minutes.innerHTML = event.target.value
 		minutesText.innerHTML = event.target.value > 1 ? "minutes" : "minute"
 		weight.innerHTML = calculateWeight(event.target.value)
+	})
+
+
+	/* --- Handle agent generation --- */
+	const agentForm = document.forms["agent-form"]
+	const agentFormStatus = document.getElementById("agent-form-status")
+
+	agentForm.addEventListener("submit", (event) => {
+		event.preventDefault()
+		
+		displayWait(agentFormStatus, "Please wait for your Agent to be generated...")
+
+		// Using XMLHttpRequest() over Fetch() for older browser compatibility
+		const agentRequest = new XMLHttpRequest()
+
+		// Bind the FormData object and the form element
+		const formData = new FormData(agentForm)
+		
+		// Check for falsy input values (null, empty string (""), undefined)
+		// meaning the user still needs to provide a username and/or password
+		callbackValue = formData.get("callbackMins")
+		if (callbackValue < 1 || callbackValue > 15) {
+			displayError(agentFormStatus, "Callback rate must be between 1 and 15 minutes")
+			return
+		}
+	  
+		// Define what happens on successful data submission
+		agentRequest.addEventListener("load", (event) => {
+			let agentResponse
+			try {
+				agentResponse = JSON.parse(event.target.responseText)
+			} catch(e) {
+				displayError(agentFormStatus, "Internal error: server did not return JSON")
+				return
+			}
+
+			if (agentResponse.error) { // response received, login error
+				displayError(agentFormStatus, agentResponse.message)
+			} else if (!agentResponse.error) { // response received, login success
+				displaySuccess(agentFormStatus, agentResponse.message)
+				setTimeout(() => { window.location.href = "/dashboard" }, 1000)
+			} else { // no response received, unknown server error
+				displayError(agentFormStatus, "Error communicating with server")
+			}
+		})
+	  
+		// Define what happens in case of error
+		agentRequest.addEventListener("error", (event) => {
+			displayError(agentFormStatus, "Oops! Something went wrong...")
+		})
+	  
+		// Set up the request
+		agentRequest.open("POST", "/dashboard")
+	  
+		// Send the request with the form values
+		agentRequest.send(formData)
 	})
 })

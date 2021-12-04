@@ -7,4 +7,4 @@ cd <pwnts_dir>
 go run "C:/Program Files/Go/src/crypto/tls/generate_cert.go" --host="pwnts.red,localhost"
 ```
 
-Name the certificate `pwnts.red.pem` and the private key `pwnts_server_key.pem`.
+Name the certificate `pwnts_cert.pem` and the private key `pwnts_key.pem`.

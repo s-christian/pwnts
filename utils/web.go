@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	//"html/template"
+	"encoding/json"
 	"math"
 	"math/rand"
 	"net/http"
@@ -30,9 +31,17 @@ var (
 	JWTSigningKey []byte = []byte("supersecretsecret")
 )
 
+// https://pkg.go.dev/encoding/json#Marshal
+type (
+	ReturnMessage struct {
+		Message string `json:"message"`
+		Error   bool   `json:"error"`
+	}
+)
+
 /*
-	Handle any errors encountered when trying to serve a web page by rendering
-	the error to the user.
+	Handle any errors encountered when trying to serve a web page by setting
+	the the response status to 500: Internal Server Error.
 */
 func CheckWebError(writer http.ResponseWriter, request *http.Request, err error, errorMessage string) bool {
 	if CheckError(Error, err, errorMessage) {
@@ -41,6 +50,50 @@ func CheckWebError(writer http.ResponseWriter, request *http.Request, err error,
 		return true
 	}
 	return false
+}
+
+/*
+	Log the IP address of the request with the specified error level and
+	message.
+*/
+func LogIP(messageType logType, request *http.Request, messages ...string) {
+	Log(messageType, append([]string{GetUserIP(request) + ":"}, messages...)...)
+}
+
+/*
+	Extract the first value from the specified form field. Automatically
+	runs ValidateFormData to check for errors.
+*/
+func GetFormDataSingle(writer http.ResponseWriter, request *http.Request, dataName string) (dataSingle string) {
+	// Necessary to populate the request.Form and request.PostForm attributes
+	err := request.ParseMultipartForm(1024)
+	if err != nil {
+		ReturnStatusServerError(writer, request, "Could not parse form data")
+		LogIP(Error, request, "Could not parse POSTed form data. Malicious?")
+		return
+	}
+
+	formData := request.PostForm[dataName]
+
+	// Check that the
+	if ValidateFormData(writer, request, formData, 1, 1) {
+		dataSingle = formData[0]
+	}
+
+	return
+}
+
+/*
+	Ensure that the form field contains the expected number of objects.
+*/
+func ValidateFormData(writer http.ResponseWriter, request *http.Request, formData []string, minObjects int, maxObjects int) bool {
+	if len(formData) < minObjects || len(formData) > maxObjects {
+		ReturnStatusUserError(writer, request, "Must provide value for 'callbackMins'")
+		LogIP(Error, request, "Invalid "+request.Method+" request to '"+request.RequestURI+"'. Malicious?")
+		return false
+	} else {
+		return true
+	}
 }
 
 func GetUserIP(request *http.Request) string {
@@ -56,8 +109,82 @@ func GetUserIP(request *http.Request) string {
 	return IPAddress
 }
 
+/*
+	Parses the JSON Web Token "auth" cookie and returns its claims as
+	jwt.MapClaims.
+*/
+func GetAuthClaims(writer http.ResponseWriter, request *http.Request) (authClaims jwt.MapClaims, err error) {
+	// Get auth cookie
+	authCookie, err := request.Cookie("auth")
+	// If cookie doesn't exist
+	if err != nil {
+		http.Redirect(writer, request, "/login", http.StatusFound)
+		return
+	}
+
+	authClaims, err = GetJWTClaims(authCookie, writer, request)
+	return
+}
+
+/*
+	Parses the provided JSON Web Token cookie and returns its claims as
+	jwt.MapClaims.
+*/
+func GetJWTClaims(jwtCookie *http.Cookie, writer http.ResponseWriter, request *http.Request) (tokenClaims jwt.MapClaims, err error) {
+	// Parse token
+	token, err := jwt.Parse(
+		jwtCookie.Value,
+		func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, errors.New("incorrect signing method")
+			}
+
+			// Return the signing key for token validation
+			return JWTSigningKey, nil
+		},
+	)
+
+	// Token is not a proper JWT, is expired, or does not use the correct
+	// signing method
+	if err != nil {
+		return
+	}
+
+	// I believe the above jwt.Parse() already does all of the token validation
+	// for us, but the below checks are "just in case".
+
+	// Check if the JWT is valid
+	if !token.Valid {
+		err = errors.New("token invalid")
+		return
+	}
+
+	// Type the claims as jwt.MapClaims
+	if mapClaims, ok := token.Claims.(jwt.MapClaims); !ok {
+		err = errors.New("token claims invalid")
+		return
+	} else {
+		// Make sure the token isn't expired (current time > exp).
+		// Automatically uses the RFC standard "exp", "iat", and "nbf" claims,
+		// if they exist, with values interpretted as UNIX seconds.
+		err = mapClaims.Valid()
+		if err != nil {
+			return
+		}
+
+		tokenClaims = token.Claims.(jwt.MapClaims)
+	}
+
+	if len(tokenClaims) == 0 {
+		err = errors.New("token claims don't exist")
+		return
+	}
+
+	return
+}
+
 func ClearAuthCookieAndRedirect(writer http.ResponseWriter, request *http.Request, err error) {
-	LogError(Warning, err, GetUserIP(request)+": Invalid token")
+	LogIP(Warning, request, "Invalid token -", err.Error())
 
 	// Delete the expired auth cookie
 	newAuthCookie := http.Cookie{Name: "auth", Value: "", MaxAge: -1, Secure: true, HttpOnly: true}
@@ -94,6 +221,24 @@ func GenerateJWT(db *sql.DB, username string, teamID int) (tokenStirng string, e
 	tokenString, err := token.SignedString(JWTSigningKey)
 
 	return tokenString, err
+}
+
+func ReturnStatusJSON(writer http.ResponseWriter, request *http.Request, message string, isError bool) {
+	// Send JSON response
+	err := json.NewEncoder(writer).Encode(&ReturnMessage{Message: message, Error: isError})
+	// Check for encoding error
+	CheckWebError(writer, request, err, "Could not encode login response to JSON")
+}
+func ReturnStatusSuccess(writer http.ResponseWriter, request *http.Request, message string) {
+	ReturnStatusJSON(writer, request, message, false)
+}
+func ReturnStatusUserError(writer http.ResponseWriter, request *http.Request, message string) {
+	writer.WriteHeader(http.StatusUnauthorized)
+	ReturnStatusJSON(writer, request, message, true)
+}
+func ReturnStatusServerError(writer http.ResponseWriter, request *http.Request, message string) {
+	writer.WriteHeader(http.StatusInternalServerError)
+	ReturnStatusJSON(writer, request, message, true)
 }
 
 func CalculateCallbackPoints(timeDifference time.Duration, targetValue int) int {

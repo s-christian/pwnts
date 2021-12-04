@@ -31,22 +31,14 @@ import (
 	"github.com/s-christian/pwnts/site/api"
 	"github.com/s-christian/pwnts/utils"
 
-	"github.com/golang-jwt/jwt"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// In production don't commit or make public your jwtSigningKey
-// Here's a safer way by setting the MY_JWT_TOKEN environment variable:
 // var jwtSigningKey = os.Get("MY_JWT_TOKEN")
 // TODO: Read from a `.env` file or similar
 var (
 	db *sql.DB
 )
-
-// func createCert() {
-// 	config := tls.Config{}
-// 	fmt.Println(config)
-// }
 
 func serveLayoutTemplate(writer http.ResponseWriter, request *http.Request, functionName string, pageContent map[string]template.HTML) {
 	layoutTemplateFilepath := utils.CurrentDirectory + "/site/templates/layout.html"
@@ -101,9 +93,18 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 		layoutContent := map[string]template.HTML{"title": "Red Team Dashboard", "pageContent": dashboardHTML}
 		serveLayoutTemplate(writer, request, "handleDashboardPage", layoutContent)
 
-	// ***POST: Generate agent and provide downloadable agent executable
+	// *** POST: Generate agent and provide downloadable agent executable
 	case http.MethodPost:
-		writer.Write([]byte("This is a POST! Hello! :)"))
+		callbackMins := utils.GetFormDataSingle(writer, request, "callbackMin")
+
+		/* --- Logic --- */
+		// Check for tampered request
+		if callbackMins == "" {
+			utils.ReturnStatusUserError(writer, request, "Please supply values for username and password")
+			return
+		}
+
+		utils.ReturnStatusUserError(writer, request, "This is a test")
 	}
 
 }
@@ -120,60 +121,23 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 
 	// *** POST: API to set the JWT cookie upon successful login and return success
 	case http.MethodPost:
-		// Necessary to populate the request.Form and request.PostForm attributes
-		request.ParseMultipartForm(1024)
-
-		// PostForm is of type url.Values which is of type map[string][]string
-		postedUsername := request.PostForm["username"][0]
-		postedPassword := request.PostForm["password"][0]
-
-		// https://pkg.go.dev/encoding/json#Marshal
-		type ReturnMessage struct {
-			Message string `json:"message"`
-			Error   bool   `json:"error"`
-		}
-
-		jsonEncoder := json.NewEncoder(writer)
-
-		// --- Helper functions ---
-
-		returnSuccess := func(message string) {
-			// Send JSON response
-			err := jsonEncoder.Encode(&ReturnMessage{Message: message, Error: false})
-			// Check for encoding error
-			utils.CheckWebError(writer, request, err, "Could not encode login response to JSON")
-		}
-
-		returnError := func(message string) {
-			err := jsonEncoder.Encode(&ReturnMessage{Message: message, Error: true})
-			utils.CheckWebError(writer, request, err, "Could not encode login response to JSON")
-		}
-
-		returnUserError := func(message string) {
-			writer.WriteHeader(http.StatusUnauthorized)
-			returnError(message)
-		}
-
-		returnServerError := func(message string) {
-			writer.WriteHeader(http.StatusInternalServerError)
-			returnError(message)
-		}
+		postedUsername := utils.GetFormDataSingle(writer, request, "username")
+		postedPassword := utils.GetFormDataSingle(writer, request, "password")
 
 		// --- Logic ---
-
 		// Checking for empty form data should also be done on the client side
 		// with JavaScript. This is just a fallback.
 		if postedUsername == "" || postedPassword == "" {
-			returnUserError("Please supply values for username and password")
+			utils.ReturnStatusUserError(writer, request, "Please supply values for username and password")
 			return
 		}
 
 		teamId, _, passwordHash, _, err := utils.GetUserInfo(db, postedUsername)
 		if err == sql.ErrNoRows {
-			returnUserError("Invalid login")
+			utils.ReturnStatusUserError(writer, request, "Invalid login")
 			return
 		} else if utils.CheckError(utils.Error, err, "Backend error querying database") {
-			returnUserError("Could not query database. Please contact an administrator.")
+			utils.ReturnStatusUserError(writer, request, "Could not query database. Please contact an administrator.")
 			return
 		}
 
@@ -181,7 +145,7 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 
 		// Invalid login: user does not exist or passwords do not match
 		if !validLogin {
-			returnUserError("Invalid login")
+			utils.ReturnStatusUserError(writer, request, "Invalid login")
 			return
 		}
 
@@ -190,19 +154,19 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 		// Set "auth" cookie to a signed JWT
 		newToken, err := utils.GenerateJWT(db, postedUsername, teamId)
 		if utils.CheckError(utils.Error, err, "Could not generate JWT for valid user") {
-			returnServerError("Could not generate a JWT. Please contact an administrator.")
+			utils.ReturnStatusServerError(writer, request, "Could not generate a JWT. Please contact an administrator.")
 			return
 		}
 
-		// At the end, redirect user to their team page
+		// At the end, redirect user to their eeam page
 		//defer http.Redirect(writer, request, "/dashboard", http.StatusFound)
 		// HTTP POST won't redirect. This has been done in client-side JavaScript instead.
 
 		authCookie := http.Cookie{Name: "auth", Value: newToken, Secure: true} //, HttpOnly: true}
 		http.SetCookie(writer, &authCookie)
 
-		utils.Log(utils.Done, utils.GetUserIP(request)+": User '"+postedUsername+"' successfully logged in")
-		returnSuccess("Greetings, hacker!")
+		utils.ReturnStatusSuccess(writer, request, "Greetings, hacker!")
+		utils.LogIP(utils.Done, request, "User '"+postedUsername+"' successfully logged in")
 	}
 }
 
@@ -210,72 +174,35 @@ func handleLoginPage(writer http.ResponseWriter, request *http.Request) {
 func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handler {
 	return http.HandlerFunc(
 		func(writer http.ResponseWriter, request *http.Request) {
-			authCookie, err := request.Cookie("auth")
-			if err != nil { // cookie not found
-				http.Redirect(writer, request, "/login", http.StatusFound)
+			tokenClaims, err := utils.GetAuthClaims(writer, request)
+			if err != nil {
+				utils.ClearAuthCookieAndRedirect(writer, request, err)
 				return
-			} else {
-				token, err := jwt.Parse(
-					authCookie.Value,
-					func(token *jwt.Token) (interface{}, error) {
-						if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-							return nil, errors.New("incorrect signing method")
-						}
-
-						// Return the signing key for token validation
-						return utils.JWTSigningKey, nil
-					},
-				)
-
-				// Token is not a proper JWT, is expired, or does not use the correct signing method
-				if err != nil {
-					utils.ClearAuthCookieAndRedirect(writer, request, err)
-					return
-				}
-
-				// I believe the above jwt.Parse() already does all of the token validation for us,
-				// but the below checks are "just in case".
-
-				// Check if the JWT is valid
-				if !token.Valid {
-					utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token invalid"))
-					return
-				}
-
-				// --- Validate token claims (the payload data) ---
-				tokenClaims := token.Claims.(jwt.MapClaims)
-
-				// Ensure the claims we need exist in the first place
-				if tokenClaims["user"] == nil || tokenClaims["teamId"] == nil {
-					utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token claims don't exist"))
-					return
-				}
-
-				// Make sure the token isn't expired (current time > exp).
-				// Automatically uses the RFC standard "exp" claim, a timestamp in UNIX seconds.
-				if tokenClaims.Valid() != nil {
-					utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token claims are invalid"))
-					return
-				}
-
-				// Give the claims a Go type
-				var tokenUser string = tokenClaims["user"].(string)
-				// Go's JSON unmarshalling decodes JSON numbers to type float64
-				var tokenTeamID int = int(tokenClaims["teamId"].(float64))
-
-				// Validate the claims
-				if tokenUser == "" {
-					utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token claim 'user' is invalid"))
-					return
-				}
-				if tokenTeamID < 1 {
-					utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token claim 'teamId' is invalid"))
-					return
-				}
-
-				// If everything was successful, navigate to the page
-				endpoint(writer, request)
 			}
+
+			// Ensure the claims we need exist in the first place
+			if tokenClaims["user"] == nil || tokenClaims["teamId"] == nil {
+				utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token claims don't exist"))
+				return
+			}
+
+			// Give the claims a Go type
+			var tokenUser string = tokenClaims["user"].(string)
+			// Go's JSON unmarshalling decodes JSON numbers to type float64
+			var tokenTeamID int = int(tokenClaims["teamId"].(float64))
+
+			// Validate the claims
+			if tokenUser == "" {
+				utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token claim 'user' is invalid"))
+				return
+			}
+			if tokenTeamID < 1 {
+				utils.ClearAuthCookieAndRedirect(writer, request, errors.New("token claim 'teamId' is invalid"))
+				return
+			}
+
+			// If everything was successful, navigate to the page
+			endpoint(writer, request)
 		},
 	)
 }
@@ -311,7 +238,7 @@ func handleHomePage(writer http.ResponseWriter, request *http.Request) {
 
 func apiScoreboard(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
-	case http.MethodPost:
+	case http.MethodGet:
 		jsonEncoder := json.NewEncoder(writer)
 		writer.Header().Add("Content-Type", "application/json")
 		scoreboardData, _ := api.GetScoreboardData(db)
@@ -366,8 +293,8 @@ func main() {
 	// }
 	// defer listener.Close()
 
-	certPath := utils.CurrentDirectory + "/pwnts_red.pem"
-	privateKeyPath := utils.CurrentDirectory + "/pwnts_server_key.pem"
+	certPath := utils.CurrentDirectory + "/pwnts_cert.pem"
+	privateKeyPath := utils.CurrentDirectory + "/pwnts_key.pem"
 
 	// cert, err := os.ReadFile(certPath)
 	// utils.CheckErrorExit(utils.Error, err, utils.ERR_GENERIC, "Cannot read certificate file '"+certPath+"'")
@@ -400,5 +327,5 @@ func main() {
 	handleRequests()
 
 	err := http.ListenAndServeTLS(listenAddress, certPath, privateKeyPath, nil)
-	utils.CheckErrorExit(utils.Error, err, utils.ERR_GENERIC, "Couldn't start HTTP listener at", listenAddress)
+	utils.CheckErrorExit(utils.Error, err, utils.ERR_GENERIC, "Couldn't start HTTPS listener at", listenAddress)
 }

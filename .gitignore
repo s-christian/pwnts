@@ -13,3 +13,6 @@ build
 
 # Secret environment variables
 .env
+
+# Old backup files
+*.old

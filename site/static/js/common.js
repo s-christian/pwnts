@@ -1,4 +1,5 @@
 // *** Functions for options
+// Enable or disable the scanlines stylesheet
 function disableScanlines() {
 	scanlinesStylesheet = document.getElementById("scanlinesStylesheet").disabled = true
 }
@@ -6,6 +7,7 @@ function enableScanlines() {
 	scanlinesStylesheet = document.getElementById("scanlinesStylesheet").disabled = false
 }
 
+// Play or fade in audio
 let fadeInInterval
 const fadeStepMs = 200
 function stopAudio(audio) {
@@ -28,6 +30,23 @@ function fadeInAudio(audio, fadeDelay) {
 			clearInterval(fadeInInterval)
 		}
 	}, fadeStepMs)
+}
+
+// Display success or error messages for form submissions
+const displayError = (statusElement, errorMessage) => {
+	statusElement.innerHTML = errorMessage
+	statusElement.classList.add("statusError")
+	statusElement.classList.remove("statusSuccess", "statusWait", "hidden")
+}
+const displaySuccess = (statusElement, successMessage) => {
+	statusElement.innerHTML = successMessage 
+	statusElement.classList.add("statusSuccess")
+	statusElement.classList.remove("statusError", "statusWait", "hidden")
+}
+const displayWait = (statusElement, waitMessage) => {
+	statusElement.innerHTML = waitMessage 
+	statusElement.classList.add("statusWait")
+	statusElement.classList.remove("statusError", "statusSuccess", "hidden")
 }
 
 // *** Main content
