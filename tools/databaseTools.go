@@ -119,7 +119,7 @@ func initializeDatabase() {
 	}
 	defer utils.Close(db)
 
-	const createTablesFile string = "/tools/create_tables.txt" // default
+	const createTablesFile string = "/tools/create_tables.sql" // default
 	createTablesCommands, err := os.ReadFile(utils.CurrentDirectory + createTablesFile)
 	utils.CheckErrorExit(utils.Error, err, utils.ERR_FILE_READ, "Could not read file \"create_tables.txt\"")
 
