@@ -180,7 +180,7 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 		// from the filename.
 		utils.PromptFileDownload(writer, request, buildDirectory+newAgentFilename, newAgentFilenameTruncated)
 
-		utils.ReturnStatusSuccess(writer, request, "Compiled agent successfully!")
+		//utils.ReturnStatusSuccess(writer, request, "Compiled agent successfully!")
 	}
 
 }
