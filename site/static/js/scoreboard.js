@@ -25,9 +25,12 @@ async function updateScoreboard() {
 }
 
 async function populateScoreboard(data) {
+	console.log(data)
+	/*
 	for (let team in data) {
 		//console.log(data[team])
 	}
+	*/
 }
 
 // *** Refresh the scoreboard every five seconds via AJAX
