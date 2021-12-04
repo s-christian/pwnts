@@ -27,6 +27,9 @@ import (
 	"html/template"
 	"net"
 	"net/http"
+	"os/exec"
+
+	"github.com/google/uuid"
 
 	"github.com/s-christian/pwnts/site/api"
 	"github.com/s-christian/pwnts/utils"
@@ -76,14 +79,6 @@ func returnTemplateHTML(writer http.ResponseWriter, request *http.Request, htmlF
 }
 
 func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
-	/* Get dashboard information for specific team */
-	/*
-		Required parameters for agent construction in `pwnts/agent/agent.go`:
-		- Agent UUID
-		- Team ID
-		- Callback rate in minutes
-	*/
-
 	switch request.Method {
 	// *** GET: Display team dashboard with agent generation
 	case http.MethodGet:
@@ -95,16 +90,86 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 
 	// *** POST: Generate agent and provide downloadable agent executable
 	case http.MethodPost:
-		callbackMins := utils.GetFormDataSingle(writer, request, "callbackMin")
+		/*
+			Required parameters for agent construction in `pwnts/agent/agent.go`:
+			- Agent variables:
+				- agentUUID
+				- localPort
+				- serverIP
+				- serverPort
+				- callbackFrequencyMinutes
+			- Environment variables:
+				- GOOS   (the OS to target)
+				- GOARCH (the architecture to target)
+		*/
+
+		agentUUID := uuid.New()
+		postedLocalPort := utils.GetFormDataSingle(writer, request, "localPort")
+		postedCallbackFrequencyMinutes := utils.GetFormDataSingle(writer, request, "callbackMins")
+		postedOS := utils.GetFormDataSingle(writer, request, "targetOs")
+		postedArch := utils.GetFormDataSingle(writer, request, "targetArch")
 
 		/* --- Logic --- */
-		// Check for tampered request
-		if callbackMins == "" {
-			utils.ReturnStatusUserError(writer, request, "Please supply values for username and password")
+		// Check for the existence of necessary values
+		if postedLocalPort == "" || postedCallbackFrequencyMinutes == "" || postedOS == "" {
+			utils.ReturnStatusUserError(writer, request, "Please provide values for all inputs")
+			utils.LogIP(utils.Error, request, "Invalid input value(s), request was modified")
 			return
 		}
 
-		utils.ReturnStatusUserError(writer, request, "This is a test")
+		// Check for invalid values
+
+		// Give types to the integer values
+		var localPort int
+		var callbackFrequencyMinutes int
+		_, err := fmt.Sscan(postedLocalPort, &localPort)
+		if err != nil {
+			utils.ReturnStatusUserError(writer, request, "Please provide integer inputs")
+			utils.LogIP(utils.Error, request, "Invalid input value(s), request was modified")
+			return
+		}
+		_, err = fmt.Sscan(postedCallbackFrequencyMinutes, &callbackFrequencyMinutes)
+		if err != nil {
+			utils.ReturnStatusUserError(writer, request, "Please provide integer inputs")
+			utils.LogIP(utils.Error, request, "Invalid input value(s), request was modified")
+			return
+		}
+
+		if callbackFrequencyMinutes < 1 || callbackFrequencyMinutes > 15 ||
+			localPort < 1 || localPort > 65535 ||
+			(postedOS != "windows" && postedOS != "linux") ||
+			(postedArch != "amd64" && postedArch != "386") {
+
+			utils.ReturnStatusUserError(writer, request, "Invalid input detected")
+			utils.LogIP(utils.Error, request, "Invalid input value(s), request was modified")
+			return
+		}
+
+		// Generate the Agent
+		agentSource := utils.CurrentDirectory + "/agent/agent.go"
+
+		newAgentFilename := "agent_" + agentUUID.String()
+		if postedOS == "windows" {
+			newAgentFilename = newAgentFilename + ".exe"
+		}
+
+		buildDirectory := utils.CurrentDirectory + "/agent/compiled_agents/"
+
+		commandString := fmt.Sprintf(
+			"GOOS=%s GOARCH=%s go build -trimpath -ldflags '-s -w' -o %s %s",
+			postedOS,
+			postedArch,
+			buildDirectory+newAgentFilename,
+			agentSource,
+		)
+		err = exec.Command("sh", "-c", commandString).Run()
+		if err != nil {
+			utils.ReturnStatusUserError(writer, request, "Error compiling agent. Please contact an admin.")
+			utils.LogError(utils.Error, err, utils.GetUserIP(request)+": Error compiling agent")
+			return
+		}
+
+		utils.ReturnStatusUserError(writer, request, "Compiled agent successfully!")
 	}
 
 }

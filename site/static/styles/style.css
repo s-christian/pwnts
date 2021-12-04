@@ -364,9 +364,6 @@ input[type="submit"]:hover {
 #teamName {
 	color: red;
 }
-#sliderLabel {
-	font-size: 1.25rem;
-}
 #callbackSlider {
 	-webkit-appearance: none;
 	appearance: none;

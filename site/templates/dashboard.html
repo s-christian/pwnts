@@ -4,7 +4,25 @@
 				<form id="agent-form" method="post" autocomplete="off">
 					<div id="agent-form-status" class="hidden"></div>
 					<div class="formGroup">
-						<label id="sliderLabel" for="callbackMins">Agent callback rate:</label>
+						<label for="targetOs">Target OS:</label>
+						<select id="targetOs" name="targetOs">
+							<option value="windows">Windows</option>
+							<option value="linux">Linux</option>
+						</select>
+					</div>
+					<div class="formGroup">
+						<label for="targetArch">Target Architecture:</label>
+						<select id="targetArch" name="targetArch">
+							<option value="amd64">64-bit</option>
+							<option value="386">32-bit</option>
+						</select>
+					</div>
+					<div class="formGroup">
+						<label for="localPort">Local Port:</label>
+						<input type="number" id="localPort" name="localPort" placeholder="1337" value="1337">
+					</div>
+					<div class="formGroup">
+						<label for="callbackMins">Agent callback rate:</label>
 						<input type="range" id="callbackSlider" name="callbackMins" min="1" max="15" value="1" step="1">
 						<p id="sliderOutput"><span id="minutes">1</span> <span id="minutesText">minute</span> = <span id="callbackWeight">1</span>x pwnts value per host</p>
 					</div>

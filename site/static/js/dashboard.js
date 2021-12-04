@@ -55,8 +55,12 @@ document.addEventListener("DOMContentLoaded", () => {
 		// Bind the FormData object and the form element
 		const formData = new FormData(agentForm)
 		
-		// Check for falsy input values (null, empty string (""), undefined)
-		// meaning the user still needs to provide a username and/or password
+		// Validate input values
+		portValue = formData.get("localPort")
+		if (portValue < 1 || portValue > 65535) {
+			displayError(agentFormStatus, "Port numbers must range between 1 and 65535")
+			return
+		}
 		callbackValue = formData.get("callbackMins")
 		if (callbackValue < 1 || callbackValue > 15) {
 			displayError(agentFormStatus, "Callback rate must be between 1 and 15 minutes")
@@ -73,11 +77,10 @@ document.addEventListener("DOMContentLoaded", () => {
 				return
 			}
 
-			if (agentResponse.error) { // response received, login error
+			if (agentResponse.error) { // response received, error
 				displayError(agentFormStatus, agentResponse.message)
-			} else if (!agentResponse.error) { // response received, login success
+			} else if (!agentResponse.error) { // response received, success
 				displaySuccess(agentFormStatus, agentResponse.message)
-				setTimeout(() => { window.location.href = "/dashboard" }, 1000)
 			} else { // no response received, unknown server error
 				displayError(agentFormStatus, "Error communicating with server")
 			}
