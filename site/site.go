@@ -105,6 +105,14 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 				- GOARCH (the architecture to target)
 		*/
 
+		tokenClaims, err := utils.GetAuthClaims(writer, request)
+		if err != nil || tokenClaims["teamId"] == nil {
+			return
+		}
+
+		// Go's JSON unmarshalling decodes JSON numbers to type float64
+		var teamID int = int(tokenClaims["teamId"].(float64))
+
 		agentUUID := uuid.New()
 		postedLocalPort := utils.GetFormDataSingle(writer, request, "localPort")
 		postedCallbackFrequencyMinutes := utils.GetFormDataSingle(writer, request, "callbackMins")
@@ -114,7 +122,7 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 		/* --- Logic --- */
 		// Check for the existence of necessary values
 		if postedLocalPort == "" || postedCallbackFrequencyMinutes == "" || postedOS == "" {
-			utils.ReturnStatusUserError(writer, request, "Please provide values for all inputs")
+			//utils.ReturnStatusUserError(writer, request, "Please provide values for all inputs")
 			utils.LogIP(utils.Error, request, "Invalid input value(s), request was modified")
 			return
 		}
@@ -124,15 +132,15 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 		// Give types to the integer values
 		var localPort int
 		var callbackFrequencyMinutes int
-		_, err := fmt.Sscan(postedLocalPort, &localPort)
+		_, err = fmt.Sscan(postedLocalPort, &localPort)
 		if err != nil {
-			utils.ReturnStatusUserError(writer, request, "Please provide integer inputs")
+			//utils.ReturnStatusUserError(writer, request, "Please provide integer inputs")
 			utils.LogIP(utils.Error, request, "Invalid input value(s), request was modified")
 			return
 		}
 		_, err = fmt.Sscan(postedCallbackFrequencyMinutes, &callbackFrequencyMinutes)
 		if err != nil {
-			utils.ReturnStatusUserError(writer, request, "Please provide integer inputs")
+			//utils.ReturnStatusUserError(writer, request, "Please provide integer inputs")
 			utils.LogIP(utils.Error, request, "Invalid input value(s), request was modified")
 			return
 		}
@@ -142,7 +150,7 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 			(postedOS != "windows" && postedOS != "linux") ||
 			(postedArch != "amd64" && postedArch != "386") {
 
-			utils.ReturnStatusUserError(writer, request, "Invalid input detected")
+			//utils.ReturnStatusUserError(writer, request, "Invalid input detected")
 			utils.LogIP(utils.Error, request, "Invalid input value(s), request was modified")
 			return
 		}
@@ -171,10 +179,12 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 		// the host OS and either run "cmd" or "sh" accordingly.
 		err = exec.Command("sh", "-c", commandString).Run()
 		if err != nil {
-			utils.ReturnStatusUserError(writer, request, "Error compiling agent. Please contact an admin.")
+			//utils.ReturnStatusUserError(writer, request, "Error compiling agent. Please contact an admin.")
 			utils.LogError(utils.Error, err, utils.GetUserIP(request)+": Error compiling agent")
 			return
 		}
+
+		utils.RegisterAgent(db, agentUUID.String(), teamID)
 
 		// Prompt the user's browser to download the file, stripping the UUID
 		// from the filename.
