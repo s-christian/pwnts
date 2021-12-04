@@ -18,6 +18,8 @@ package main
 
 import (
 	"bytes"
+	"strings"
+
 	//"crypto/tls"
 	"database/sql"
 	"encoding/json"
@@ -148,7 +150,7 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 		// Generate the Agent
 		agentSource := utils.CurrentDirectory + "/agent/agent.go"
 
-		newAgentFilename := "agent_" + agentUUID.String()
+		newAgentFilename := "agent_" + postedOS + "_" + postedArch + "_" + agentUUID.String()
 		if postedOS == "windows" {
 			newAgentFilename = newAgentFilename + ".exe"
 		}
@@ -162,12 +164,19 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 			buildDirectory+newAgentFilename,
 			agentSource,
 		)
+
+		// TODO: This currently only works on Linux. In the future, determine
+		// the host OS and either run "cmd" or "sh" accordingly.
 		err = exec.Command("sh", "-c", commandString).Run()
 		if err != nil {
 			utils.ReturnStatusUserError(writer, request, "Error compiling agent. Please contact an admin.")
 			utils.LogError(utils.Error, err, utils.GetUserIP(request)+": Error compiling agent")
 			return
 		}
+
+		// Prompt the user's browser to download the file, stripping the UUID
+		// from the filename.
+		utils.PromptFileDownload(writer, request, buildDirectory+newAgentFilename, strings.Join(strings.Split(newAgentFilename, "_")[0:3], "_"))
 
 		utils.ReturnStatusSuccess(writer, request, "Compiled agent successfully!")
 	}

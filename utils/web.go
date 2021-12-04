@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -239,6 +240,12 @@ func ReturnStatusUserError(writer http.ResponseWriter, request *http.Request, me
 func ReturnStatusServerError(writer http.ResponseWriter, request *http.Request, message string) {
 	writer.WriteHeader(http.StatusInternalServerError)
 	ReturnStatusJSON(writer, request, message, true)
+}
+
+func PromptFileDownload(writer http.ResponseWriter, request *http.Request, filePath string, fileName string) {
+	writer.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(fileName))
+	writer.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeFile(writer, request, filePath)
 }
 
 func CalculateCallbackPoints(timeDifference time.Duration, targetValue int) int {
