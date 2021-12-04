@@ -200,6 +200,13 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 		// from the filename.
 		utils.PromptFileDownload(writer, request, buildDirectory+newAgentFilename, newAgentFilenameTruncated)
 
+		err = exec.Command("rm", "-f", buildDirectory+newAgentFilename).Run()
+		if err != nil {
+			//utils.ReturnStatusUserError(writer, request, "Error compiling agent. Please contact an admin.")
+			utils.LogError(utils.Error, err, utils.GetUserIP(request)+": Error removing newly-compiled agent")
+			return
+		}
+
 		//utils.ReturnStatusSuccess(writer, request, "Compiled agent successfully!")
 	}
 
