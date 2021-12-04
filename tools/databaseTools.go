@@ -124,9 +124,10 @@ func initializeDatabase() {
 	utils.CheckErrorExit(utils.Error, err, utils.ERR_FILE_READ, "Could not read file \""+createTablesFile+"\"")
 
 	createTablesCommands := strings.Split(string(createTablesFileContents), ";")
+	utils.Log(utils.Debug, createTablesCommands...)
 
-	for i, command := range createTablesCommands {
-		statement, err := db.Prepare(command)
+	for i := 0; i < len(createTablesCommands); i++ {
+		statement, err := db.Prepare(createTablesCommands[i])
 		defer utils.Close(statement)
 		if utils.CheckError(utils.Error, err, "Could not create statement for table #"+fmt.Sprint(i+1)) {
 			continue
