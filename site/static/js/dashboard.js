@@ -71,7 +71,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		// Define what happens on successful data submission
 		agentRequest.addEventListener("load", (event) => {
 			// https://medium.com/@drevets/you-cant-prompt-a-file-download-with-the-content-disposition-header-using-axios-xhr-sorry-56577aa706d6
-			agentResponse = event.target.responseText
+			agentResponse = event.target.response
 			const url = window.URL.createObjectURL(new Blob([agentResponse]))
 			const link = document.createElement("a")
 			link.href = url
