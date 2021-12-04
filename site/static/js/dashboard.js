@@ -51,6 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 		// Using XMLHttpRequest() over Fetch() for older browser compatibility
 		const agentRequest = new XMLHttpRequest()
+		agentRequest.responseType("blob") // raw file contents, important
 
 		// Bind the FormData object and the form element
 		const formData = new FormData(agentForm)
@@ -69,21 +70,15 @@ document.addEventListener("DOMContentLoaded", () => {
 	  
 		// Define what happens on successful data submission
 		agentRequest.addEventListener("load", (event) => {
-			let agentResponse
-			try {
-				agentResponse = JSON.parse(event.target.responseText)
-			} catch(e) {
-				displayError(agentFormStatus, "Internal error: server did not return JSON")
-				return
-			}
-
-			if (agentResponse.error) { // response received, error
-				displayError(agentFormStatus, agentResponse.message)
-			} else if (!agentResponse.error) { // response received, success
-				displaySuccess(agentFormStatus, agentResponse.message)
-			} else { // no response received, unknown server error
-				displayError(agentFormStatus, "Error communicating with server")
-			}
+			// https://medium.com/@drevets/you-cant-prompt-a-file-download-with-the-content-disposition-header-using-axios-xhr-sorry-56577aa706d6
+			agentResponse = event.target.responseText
+			const url = window.URL.createObjectURL(new Blob([agentResponse]))
+			const link = document.createElement("a")
+			link.href = url
+			document.body.appendChild(link)
+			link.click()
+			window.URL.revokeObjectURL(url)
+			displaySuccess(agentFormStatus, "Agent generated!")
 		})
 	  
 		// Define what happens in case of error
