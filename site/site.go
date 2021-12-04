@@ -166,7 +166,6 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 			buildDirectory+newAgentFilename,
 			agentSource,
 		)
-		utils.Log(utils.Debug, commandString)
 
 		// TODO: This currently only works on Linux. In the future, determine
 		// the host OS and either run "cmd" or "sh" accordingly.
