@@ -169,7 +169,7 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 			return
 		}
 
-		utils.ReturnStatusUserError(writer, request, "Compiled agent successfully!")
+		utils.ReturnStatusSuccess(writer, request, "Compiled agent successfully!")
 	}
 
 }
