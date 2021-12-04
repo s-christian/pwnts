@@ -173,7 +173,7 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 
 		// All of the Agent's build variables must be of type string when we pass their values during compilation
 		commandString := fmt.Sprintf(
-			"GOOS=%s GOARCH=%s UUID=%s LOCAL_PORT=%d SERVER_IP=%s SERVER_PORT=%d MINS=%d go build -trimpath -ldflags '-s -w -X main.AgentUUID=$UUID -X main.LocalPort=$LOCAL_PORT -X main.ServerIP=$SERVER_IP -X main.ServerPort=$SERVER_PORT -X main.CallbackFrequencyMinutes=$MINS' -o %s %s",
+			"GOOS=%s GOARCH=%s UUID=%s LOCAL_PORT=%d SERVER_IP=%s SERVER_PORT=%d MINS=%d go build -trimpath -ldflags \"-s -w -X main.AgentUUID=$UUID -X main.LocalPort=$LOCAL_PORT -X main.ServerIP=$SERVER_IP -X main.ServerPort=$SERVER_PORT -X main.CallbackFrequencyMinutes=$MINS\" -o %s %s",
 			postedOS,
 			postedArch,
 			agentUUID,

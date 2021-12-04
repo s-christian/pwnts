@@ -25,7 +25,7 @@ import (
 	"github.com/s-christian/pwnts/utils"
 
 	"github.com/fatih/color"
-	//"github.com/google/uuid"
+	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -38,21 +38,20 @@ type AgentInfoStruct struct {
 }
 
 var (
-	AgentUUID string
-	//AgentUUID string = uuid.New().String() // set during compilation
+	AgentUUID string // set during compilation
 
-	LocalPortString string = "1337" // set during compilation
+	LocalPortString string // set during compilation
 	localPort       int
 	localAddress    net.TCPAddr
 	// testing: localAddress      net.TCPAddr   = net.TCPAddr{Port: LocalPort}
 
-	ServerIP         string = "127.0.0.1" // set during compilation
-	ServerPortString string = "444"       // set during compilation
+	ServerIP         string // set during compilation
+	ServerPortString string // set during compilation
 	serverPort       int
 	serverAddress    net.TCPAddr
 	serverPublicKey  string = "555"
 
-	CallbackFrequencyMinutesString string = "1" // set during compilation
+	CallbackFrequencyMinutesString string // set during compilation
 	callbackFrequencyMinutes       time.Duration
 
 	agentInfo AgentInfoStruct
@@ -155,6 +154,23 @@ func (info AgentInfoStruct) printAgentInfo() {
 }
 
 func main() {
+	// Initialize variables if they weren't provide during the build
+	if LocalPortString == "" {
+		LocalPortString = "1337"
+	}
+	if AgentUUID == "" {
+		AgentUUID = uuid.New().String()
+	}
+	if ServerPortString == "" {
+		ServerPortString = "444"
+	}
+	if CallbackFrequencyMinutesString == "" {
+		CallbackFrequencyMinutesString = "1"
+	}
+	if ServerIP == "" {
+		ServerIP = "127.0.0.1"
+	}
+
 	// Set up variables
 	_, err := fmt.Sscan(LocalPortString, &localPort)
 	utils.CheckErrorExit(utils.Error, err, utils.ERR_SCAN, "Could not parse LocalPortString as integer")
