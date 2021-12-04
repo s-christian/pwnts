@@ -106,7 +106,7 @@ func ValidateDatabase(db *sql.DB) bool {
 		Log(Done, "Database validated")
 		return true
 	} else {
-		Log(Error, "Database is missing", fmt.Sprint(numExpectedTables-tableCounter), "tables, please run `go run server.go --init-db`")
+		Log(Error, "Database is missing", fmt.Sprint(numExpectedTables-tableCounter), "tables, please run `go run tools/databaseTools.go --init-db`")
 		return false
 	}
 }

@@ -127,10 +127,10 @@ func initializeDatabase() {
 
 	for i, command := range createTablesCommands {
 		statement, err := db.Prepare(command)
-		if utils.CheckError(utils.Error, err, "Could not create statement for table #"+fmt.Sprint(i)) {
+		defer utils.Close(statement)
+		if utils.CheckError(utils.Error, err, "Could not create statement for table #"+fmt.Sprint(i+1)) {
 			continue
 		}
-		defer utils.Close(statement)
 
 		_, err = statement.Exec()
 		if err != nil {

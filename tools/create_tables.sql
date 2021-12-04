@@ -31,6 +31,3 @@ CREATE TABLE "Teams" (
 	"created_date_unix"	INTEGER NOT NULL,
 	PRIMARY KEY("team_id" AUTOINCREMENT)
 );
-
---This table is automatically generated and used by the AUTOINCREMENT functionality.
-CREATE TABLE sqlite_sequence(name,seq);
