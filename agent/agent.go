@@ -36,20 +36,21 @@ type agentInfoStruct struct {
 
 var (
 	serverPublicKey string          = "555"
-	agentUUID       uuid.UUID       = uuid.New()
-	agentInfo       agentInfoStruct = agentInfoStruct{ServerPublicKey: serverPublicKey, AgentUUID: agentUUID}
-	// testing: agentUUID, _                 = uuid.Parse("ef1a6a78-0d95-490a-a07f-9607e00b96ce")
+	AgentUUID       uuid.UUID       = uuid.New()
+	agentInfo       agentInfoStruct = agentInfoStruct{ServerPublicKey: serverPublicKey, AgentUUID: AgentUUID}
+	// testing: AgentUUID, _                 = uuid.Parse("ef1a6a78-0d95-490a-a07f-9607e00b96ce")
 
-	localPort    int         = 1337
-	localAddress net.TCPAddr = net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort}
-	//localAddress      net.TCPAddr   = net.TCPAddr{Port: localPort}
+	LocalPort    int         = 1337
+	localAddress net.TCPAddr = net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: LocalPort}
+	//localAddress      net.TCPAddr   = net.TCPAddr{Port: LocalPort}
 
-	serverIP      string      = "127.0.0.1"
-	serverPort    int         = 444
-	serverAddress net.TCPAddr = net.TCPAddr{IP: net.ParseIP(serverIP), Port: serverPort}
+	ServerIP      string      = "127.0.0.1"
+	ServerPort    int         = 444
+	serverAddress net.TCPAddr = net.TCPAddr{IP: net.ParseIP(ServerIP), Port: ServerPort}
 
 	tlsConfig                tls.Config    = tls.Config{InsecureSkipVerify: true}
-	callbackFrequencyMinutes time.Duration = 1 * time.Minute
+	CallbackFrequencyMinutes time.Duration = 1
+	callbackFrequencyTime                  = CallbackFrequencyMinutes * time.Minute
 )
 
 func callback() {
@@ -57,7 +58,7 @@ func callback() {
 
 	// TODO: Allow for custom local port to be specified, currently unsure how to do this.
 	// Can do it with net.Dial(), but there's no option in tls.Dial()
-	conn, err := tls.Dial("tcp", serverIP+":"+fmt.Sprint(serverPort), &tlsConfig)
+	conn, err := tls.Dial("tcp", ServerIP+":"+fmt.Sprint(ServerPort), &tlsConfig)
 	//conn, err := net.DialTCP("tcp", &localAddress, &serverAddress)
 	if err != nil {
 		return
@@ -68,7 +69,7 @@ func callback() {
 		return
 	}
 
-	callbackMessage := agentUUID.String()
+	callbackMessage := AgentUUID.String()
 	numBytes, err := conn.Write([]byte(callbackMessage))
 	if err != nil { // couldn't establish connection?
 		return
@@ -85,7 +86,7 @@ func testServer() {
 
 	// TODO: Allow for custom local port to be specified, currently unsure how to do this.
 	// Can do it with net.Dial(), but there's no option in tls.Dial()
-	conn, err := tls.Dial("tcp", serverIP+":"+fmt.Sprint(serverPort), &tlsConfig)
+	conn, err := tls.Dial("tcp", ServerIP+":"+fmt.Sprint(ServerPort), &tlsConfig)
 	if err != nil {
 		utils.LogError(utils.Error, err, "Could not connect to server")
 		os.Exit(utils.ERR_CONNECTION)
@@ -96,7 +97,7 @@ func testServer() {
 		utils.LogError(utils.Warning, err, "Setting write deadline failed, this is weird")
 	}
 
-	testMessage := fmt.Sprintf("%s %s", agentUUID.String(), "TEST")
+	testMessage := fmt.Sprintf("%s %s", AgentUUID.String(), "TEST")
 	numBytes, err := conn.Write([]byte(testMessage))
 	if err != nil {
 		utils.LogError(utils.Error, err, "Could not send data to server (write timeout)")
@@ -162,7 +163,7 @@ func main() {
 
 	// Call back to server according to the callback frequency in minutes
 	if !single {
-		for range time.Tick(callbackFrequencyMinutes) {
+		for range time.Tick(callbackFrequencyTime) {
 			callback()
 		}
 	}

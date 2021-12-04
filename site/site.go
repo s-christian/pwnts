@@ -113,6 +113,9 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 		// Go's JSON unmarshalling decodes JSON numbers to type float64
 		var teamID int = int(tokenClaims["teamId"].(float64))
 
+		serverIP := "127.0.0.1"
+		serverPort := 444
+
 		agentUUID := uuid.New()
 		postedLocalPort := utils.GetFormDataSingle(writer, request, "localPort")
 		postedCallbackFrequencyMinutes := utils.GetFormDataSingle(writer, request, "callbackMins")
@@ -168,9 +171,14 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 		buildDirectory := utils.CurrentDirectory + "/agent/compiled_agents/"
 
 		commandString := fmt.Sprintf(
-			"GOOS=%s GOARCH=%s go build -trimpath -ldflags '-s -w' -o %s %s",
+			"GOOS=%s GOARCH=%s UUID=%s LOCAL_PORT=%d MINS=%d SERVER_IP=%s SERVER_PORT=%d go build -trimpath -ldflags '-s -w -X main.AgentUUID=$UUID -X main.LocalPort=$LOCAL_PORT -X main.CallbackFrequencyMinutes=$MINS -X main.ServerIP=$SERVER_IP -X main.ServerPort=$SERVER_PORT' -o %s %s",
 			postedOS,
 			postedArch,
+			agentUUID,
+			localPort,
+			callbackFrequencyMinutes,
+			serverIP,
+			serverPort,
 			buildDirectory+newAgentFilename,
 			agentSource,
 		)
