@@ -113,24 +113,28 @@ func initializeDatabase() {
 
 	// Open database (file exists)
 	db := utils.GetDatabaseHandle()
+	defer utils.Close(db)
 	if utils.ValidateDatabase(db) { // no need to initialize database if it's already valid
 		utils.Log(utils.Done, "No need to initialize database")
 		return
 	}
-	defer utils.Close(db)
 
 	const createTablesFile string = "/tools/create_tables.sql" // default
-	createTablesCommands, err := os.ReadFile(utils.CurrentDirectory + createTablesFile)
-	utils.CheckErrorExit(utils.Error, err, utils.ERR_FILE_READ, "Could not read file \"create_tables.txt\"")
+	createTablesFileContents, err := os.ReadFile(utils.CurrentDirectory + createTablesFile)
+	utils.CheckErrorExit(utils.Error, err, utils.ERR_FILE_READ, "Could not read file \""+createTablesFile+"\"")
 
-	statement, err := db.Prepare(string(createTablesCommands))
-	utils.CheckErrorExit(utils.Error, err, utils.ERR_STATEMENT, "Could not create CreateTablesCommands statement")
-	defer utils.Close(statement)
+	createTablesCommands := strings.Split(string(createTablesFileContents), ";")
 
-	_, err = statement.Exec()
-	if err != nil {
-		utils.LogError(utils.Error, err, "Could not create tables")
-		os.Exit(utils.ERR_GENERIC)
+	for _, command := range createTablesCommands {
+		statement, err := db.Prepare(command)
+		utils.CheckErrorExit(utils.Error, err, utils.ERR_STATEMENT, "Could not create CreateTableCommand statement")
+		defer utils.Close(statement)
+
+		_, err = statement.Exec()
+		if err != nil {
+			utils.LogError(utils.Error, err, "Could not create tables")
+			os.Exit(utils.ERR_GENERIC)
+		}
 	}
 
 	utils.Log(utils.Done, "Database initialized")
