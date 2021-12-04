@@ -272,8 +272,7 @@ func listenForCallbacks(listener net.Listener) {
 func setupListener(localAddress string) (net.Listener, error) {
 	utils.Log(utils.Info, "Setting up listener on", localAddress)
 
-	cwd, _ := os.Getwd()
-	cert, err := tls.LoadX509KeyPair(cwd+"/pwnts_red.pem", cwd+"/pwnts_server_key.pem")
+	cert, err := tls.LoadX509KeyPair(utils.CurrentDirectory+"/pwnts_cert.pem", utils.CurrentDirectory+"/pwnts_key.pem")
 	if err != nil {
 		utils.LogError(utils.Error, err, "Couldn't load X509 keypair")
 		os.Exit(1)
