@@ -42,7 +42,8 @@ import (
 // var jwtSigningKey = os.Get("MY_JWT_TOKEN")
 // TODO: Read from a `.env` file or similar
 var (
-	db *sql.DB
+	db       *sql.DB
+	listenIP net.IP
 )
 
 func serveLayoutTemplate(writer http.ResponseWriter, request *http.Request, functionName string, pageContent map[string]template.HTML) {
@@ -113,7 +114,7 @@ func handleDashboardPage(writer http.ResponseWriter, request *http.Request) {
 		// Go's JSON unmarshalling decodes JSON numbers to type float64
 		var teamID int = int(tokenClaims["teamId"].(float64))
 
-		serverIP := "127.0.0.1"
+		serverIP := listenIP.String()
 		serverPort := 444
 
 		agentUUID := uuid.New()
@@ -399,7 +400,6 @@ func main() {
 	/*
 		--- Main site ---
 	*/
-	var listenIP net.IP
 	if argTest {
 		listenIP = net.ParseIP("127.0.0.1")
 	} else {
