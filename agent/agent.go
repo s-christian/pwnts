@@ -25,7 +25,7 @@ import (
 	"github.com/s-christian/pwnts/utils"
 
 	"github.com/fatih/color"
-	"github.com/google/uuid"
+	//"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -38,7 +38,8 @@ type AgentInfoStruct struct {
 }
 
 var (
-	AgentUUID string = uuid.New().String() // set during compilation
+	AgentUUID string
+	//AgentUUID string = uuid.New().String() // set during compilation
 
 	LocalPortString string = "1337" // set during compilation
 	localPort       int
