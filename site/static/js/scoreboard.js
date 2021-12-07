@@ -1,4 +1,4 @@
-async function updateScoreboard() {
+function updateScoreboard() {
 	const scoreboardRequest = new XMLHttpRequest()
 
 	// Define what happens on successful data submission
@@ -24,13 +24,33 @@ async function updateScoreboard() {
 	scoreboardRequest.send()
 }
 
-async function populateScoreboard(data) {
-	console.log(data)
-	/*
+function populateScoreboard(data) {
+	scoreboardBody = document.getElementById("scoreboard").getElementsByTagName("tbody")[0]
+
+	newTableData = ""
 	for (let team in data) {
-		//console.log(data[team])
+		/*
+			Although the Go backend automatically escapes HTML tags, ensure that
+			the team name retrieved from the raw API data can't insert arbitrary
+			HTML or XSS.
+
+			Render all characters as plain text. Trick from:
+			https://stackoverflow.com/a/9251169
+		*/
+		let escape = document.createElement("textarea")
+		escape.textContent = team
+		escapedTeam = escape.innerHTML
+
+		newTableData += `
+			<tr>
+				<td class="tableTeam"><span>${escapedTeam}</span></td>
+				<td class="tablePwnts">${data[team].pwnts}</td>
+				<td class="tablePwns">${data[team].pwned_hosts}</td>
+			</tr>
+		`
 	}
-	*/
+
+	scoreboardBody.innerHTML = newTableData
 }
 
 // *** Refresh the scoreboard every five seconds via AJAX
