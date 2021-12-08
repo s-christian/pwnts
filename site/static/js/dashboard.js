@@ -47,7 +47,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	agentForm.addEventListener("submit", (event) => {
 		event.preventDefault()
 		
-		displayWait(agentFormStatus, "Please wait for your Agent to be generated...")
+		displayWait(agentFormStatus, "Agent generating...")
 
 		// Using XMLHttpRequest() over Fetch() for older browser compatibility
 		const agentRequest = new XMLHttpRequest()
