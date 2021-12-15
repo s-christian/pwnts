@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	minCallbackTime time.Duration = 1 * time.Minute
+	minCallbackTime time.Duration = 59 * time.Second
 )
 
 var (
@@ -201,8 +201,7 @@ func handleConnection(conn net.Conn) {
 			utils.Log(utils.List, "\t\t\tLast callback was", checkinTimeDifference.String(), "ago")
 
 			// Agent called back too soon, must be greater than minTime, skip this callback
-			// We don't want any rounding here
-			// If the Agent is looping 1 minute at a time, then theoretically callbacks should never be less than 1 minute (only maybe more)
+			// In testing, callbacks have rarely came back 59 seconds apart instead of 60
 			if checkinTimeDifference < minCallbackTime {
 				utils.Log(utils.Warning, "\t\t\tAgent called back too soon, ignoring ("+checkinTimeDifference.String()+" < "+minCallbackTime.String()+")")
 				return
