@@ -160,7 +160,7 @@ func handleConnection(conn net.Conn) {
 		var dbTargetValue int
 		err = checkSourceIPInScopeStatement.QueryRow(remoteIP).Scan(&dbTargetIP, &dbTargetValue)
 		if err == sql.ErrNoRows {
-			utils.Log(utils.Warning, "\t\t\tSource IP '"+remoteIP+"' is not in scope!")
+			utils.Log(utils.Error, "\t\t\tSource IP '"+remoteIP+"' is not in scope!")
 			return
 		} else if utils.CheckError(utils.Error, err, "Could not execute CheckSourceIPInScope statement") {
 			return
