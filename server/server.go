@@ -125,7 +125,7 @@ func handleConnection(conn net.Conn) {
 
 		// Unknown (non-registered) Agent UUID
 		if !knownAgent {
-			utils.Log(utils.Warning, "\t\t\tAgent", agentUUID.String(), "is unknown!")
+			utils.Log(utils.Error, "\t\t\tAgent", agentUUID.String(), "is unknown!")
 			return
 		}
 
