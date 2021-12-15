@@ -88,7 +88,7 @@ func handleConnection(conn net.Conn) {
 		agentUUID, err := uuid.Parse(dataReceivedSplit[0])
 
 		// Invalid Agent callback
-		if utils.CheckError(utils.Warning, err, "Data received from non-Agent (Not a valid UUID)!") {
+		if utils.CheckError(utils.Error, err, "Data received from non-Agent (Not a valid UUID)!") {
 			return
 		}
 
