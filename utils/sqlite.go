@@ -57,7 +57,7 @@ func ValidateDatabase(db *sql.DB) bool {
 	}
 
 	err := db.Ping()
-	CheckErrorExit(Error, err, ERR_CONNECTION, "Cannot connect to the database. Have you intialized the database with `go run site.go --init-db` yet?")
+	CheckErrorExit(Error, err, ERR_CONNECTION, "Cannot connect to the database. Have you intialized the database with `go run tools/databaseTools.go --init-db` yet?")
 
 	// This query is equivalent to `.tables` within the sqlite CLI, according to
 	// [this](https://sqlite.org/cli.html#querying_the_database_schema) documentation.
