@@ -16,6 +16,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -72,13 +73,27 @@ func registerTargetsFromFile(db *sql.DB, filename string) {
 		lineCounter++
 		lineCSV := strings.Split(scanner.Text(), ",")
 
-		var targetIP string = lineCSV[0]
+		if len(lineCSV) != 2 {
+			utils.Log(utils.Warning, "\tSkipping target "+fmt.Sprint(lineCounter)+": target entries must be on separate lines in the form of 'ip,value'")
+			continue
+		}
+
+		var targetIP net.IP = net.ParseIP(lineCSV[0])
+		if targetIP == nil {
+			utils.Log(utils.Warning, "\tSkipping target "+fmt.Sprint(lineCounter)+": '"+lineCSV[0]+"' is not a valid IP address")
+			continue
+		}
+
 		var targetValue int
-		fmt.Sscan(lineCSV[1], &targetValue)
+		_, err = fmt.Sscan(lineCSV[1], &targetValue)
 
-		utils.Log(utils.List, "Target IP: "+targetIP+",\tValue: "+fmt.Sprint(targetValue))
+		if utils.CheckError(utils.Warning, err, "\tSkipping target "+fmt.Sprint(lineCounter)+": '"+lineCSV[1]+"' is not an integer") {
+			continue
+		}
 
-		_, err := addTargetStatement.Exec(targetIP, targetValue)
+		utils.Log(utils.List, "Target IP: "+targetIP.String()+",\tValue: "+fmt.Sprint(targetValue))
+
+		_, err := addTargetStatement.Exec(targetIP.String(), targetValue)
 
 		if utils.CheckError(utils.Warning, err, "\tCould not add target (already exists?)") {
 			continue
