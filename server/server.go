@@ -327,7 +327,6 @@ func main() {
 	// make sure you don't use `:=` here as it would define its own locally-scoped variable
 	db = utils.GetDatabaseHandle()
 
-	utils.Log(utils.Info, "Opened database file")
 	defer utils.Close(db)
 
 	// Validate the database connection and structure
